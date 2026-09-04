@@ -1,0 +1,7 @@
+{
+  "task_description": "{\"goal\": \"Lay out a bounded WBNB/USDT grid per the committed Advantage Report task sheet\", \"price\": 605.5, \"budgetUsd\": 10000, \"levels\": 8, \"spanPct\": 6, \"wallBandPct\": 0.7, \"walls\": {\"574.8\": 8, \"593.52\": 9, \"605.89\": 8}}",
+  "terms": {
+    "deliverables": "grid level plan with per-level sizes",
+    "quality_standards": "deterministic arithmetic, levels within the stated span"
+  }
+}

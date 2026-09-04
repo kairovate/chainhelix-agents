@@ -1,0 +1,7 @@
+{
+  "task_description": "{\"goal\": \"Rebalance a three asset portfolio to target weights per the committed Advantage Report task sheet\", \"holdings\": {\"BTC\": 0.4, \"ETH\": 6, \"BNB\": 12}, \"targets\": {\"BTC\": 0.4, \"ETH\": 0.35, \"BNB\": 0.25}, \"prices\": {\"BTC\": 68405.51, \"ETH\": 2094, \"BNB\": 617.02}, \"driftThresholdPct\": 1, \"minTradeUsd\": 5}",
+  "terms": {
+    "deliverables": "rebalancing plan with trade list",
+    "quality_standards": "deterministic arithmetic, drift and trades to 2 decimals"
+  }
+}

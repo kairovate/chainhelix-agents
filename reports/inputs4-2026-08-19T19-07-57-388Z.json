@@ -1,0 +1,32 @@
+{
+  "capturedAt": "2026-08-19T19:07:57.388Z",
+  "source": "api.binance.com spot",
+  "task4": {
+    "holdings": [
+      {
+        "symbol": "BTC",
+        "amount": 0.4
+      },
+      {
+        "symbol": "ETH",
+        "amount": 6
+      },
+      {
+        "symbol": "BNB",
+        "amount": 12
+      }
+    ],
+    "targets": {
+      "BTC": 0.4,
+      "ETH": 0.35,
+      "BNB": 0.25
+    },
+    "prices": {
+      "BTC": 68405.51,
+      "ETH": 2094,
+      "BNB": 617.02
+    },
+    "driftThresholdPct": 1,
+    "minTradeUsd": 5
+  }
+}

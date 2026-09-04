@@ -1,0 +1,53 @@
+{
+  "capturedAt": "2026-08-19T14:08:23.148Z",
+  "source": "api.binance.com spot",
+  "task2": {
+    "pair": "WBNB/USDT",
+    "price": 605.5,
+    "budgetUsd": 10000,
+    "levels": 8,
+    "spanPct": 6,
+    "wallBandPct": 0.7,
+    "walls": [
+      {
+        "price": 574.8,
+        "touches": 8
+      },
+      {
+        "price": 593.52,
+        "touches": 9
+      },
+      {
+        "price": 605.89,
+        "touches": 8
+      }
+    ]
+  },
+  "task3": {
+    "collateral": [
+      {
+        "symbol": "BTCB",
+        "amount": 0.5,
+        "liqThreshold": 0.78
+      },
+      {
+        "symbol": "ETH",
+        "amount": 5,
+        "liqThreshold": 0.8
+      }
+    ],
+    "debt": [
+      {
+        "symbol": "USDT",
+        "amount": 25000
+      }
+    ],
+    "prices": {
+      "BTCB": 65335.99,
+      "ETH": 1937.51,
+      "USDT": 1
+    },
+    "alertHF": 1.5,
+    "criticalHF": 1.1
+  }
+}
