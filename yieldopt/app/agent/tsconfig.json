@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "vendor"
+  ],
+  "_comment": "fix 2026-09-02 H166: rootDir was src while src/unifiedMain.ts imports ../vendor/strategies; the declared build (tsc -p) failed with seven TS6059 errors and produced no dist/. rootDir . emits dist/src/unifiedMain.js and dist/vendor/...; agentcore.json names that entrypoint.",
+  "_comment_h294": "fix 2026-09-03 H294: strict does not imply unused-symbol checking, which is why four dead imports in each entrypoint compiled clean for weeks. noUnusedLocals and noUnusedParameters are separate flags and are now on; both were measured at zero diagnostics on all five agents before being set. skipLibCheck stays true: it is normal, and turning it off type-checks the vendored SDK surfaces rather than this project."
+}

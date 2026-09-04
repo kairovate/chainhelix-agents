@@ -1,0 +1,12 @@
+# Seller agent workspace: the agent sub-project has its own package.
+packages:
+  - app/agent
+# fix 2026-09-03 H16 H180: this line named pnpm 11. Blocking dependency lifecycle scripts
+# unless they are explicitly approved is a pnpm 10 behaviour, and pnpm 10 is what is pinned:
+# every workspace package.json carries "packageManager": "pnpm@10.24.0". The allowBuilds block
+# below is honoured by that major, so the file always worked; only the justification was misdated.
+# pnpm 10 blocks dependency lifecycle scripts unless explicitly approved.
+# esbuild's install script selects/materializes the platform binary required
+# by both the local build and deploy-time bundle.
+allowBuilds:
+  esbuild: true
