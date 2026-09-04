@@ -1,0 +1,136 @@
+[project]
+name = "yieldopt-agent"
+
+[stack]
+# Project-lifetime facts: which runtime adapter recipe this Agent was
+# scaffolded against. doctor / dev / deploy read these to know what to
+# check, load, and route. runtime: agentcore, or the other hosted runtime named in the runtime docs.
+runtime = "agentcore"
+# Public faces exposed by this one runtime and signer (canonical order):
+#   A2A (serveA2a): agent card + negotiate/notify_funded skills.
+#   MCP (streamable-HTTP /mcp): negotiate (signed quote) + notify_funded
+#         (verify → deliver → submit, synchronously within the tool call) +
+#         read-only chain tools.
+#   X402: publish the sibling /x402 seller route. X402-only still declares
+#          A2A natively to AgentCore but suppresses that protocol face at the
+#          platform gateway.
+protocols = ["A2A","X402"]
+
+[network]
+default = "bsc-mainnet"
+
+[deploy]
+# Legacy scaffold intent: this project was created for the managed BNB trial.
+# Deployment still requires an explicit `bag deploy --provider bnb` choice;
+# this field is never used as a silent provider default. Post-deploy state is
+# recorded under [deploy.platform].
+destination = "self"
+# Artifact channel: 'zip' (evm-local default, managed runtime, no Docker)
+# or 'container' (local Docker build → brokered ECR; forced for twak).
+platform_artifact = "zip"
+
+[wallet]
+# Local keystore signer. The Agent is the SOLE key-holder/signer.
+# The keystore lives at the WORKSPACE root, outside app/agent (the deploy
+# codeLocation), so no packaging path can bundle it into a deploy artifact.
+kind = "evm-local"
+signer = "local"
+keystore_dir = "../../.studio/wallets"
+# address = "0x..."   # filled by `bag wallet new`
+address = "0xcCAe2DA18278C663Fc808fa858FD89CC34cf701f"
+
+[llm]
+provider = "pieverse-llm"
+model = "auto/free"
+
+[llm.pieverse]
+# Pieverse topup runs ONLY on BSC mainnet (chainId=56); decoupled from [network].default.
+network = "bsc-mainnet"
+# key_hash = "..."        # written by `bag llm activate`
+# zero-deposit default. `bag llm activate` creates the key with $0
+# allocation; switch to a paid model + `bag llm topup` only when you need it.
+initial_allocation_usd = 0
+
+[llm.auto_renew]
+# hook auto-allocates from Pieverse Account Balance to the API key when Key
+# Credit < min_balance_usd. Account Balance is NEVER refilled automatically
+# from your wallet UNLESS you opt in via `bag budget enable`, defaults below
+# stay in allocate-only mode. This automatic hook IS the agent's LLM-credit
+# self-top-up (NOT an LLM-callable tool).
+enabled = false           # 2026-08-20: opted out (redteam A9 leftover; agents run zero-allocation keys, hook has nothing to renew)
+min_balance_usd = 0.01    # Key Credit threshold that triggers allocate
+topup_chunk_usd = 1.0     # chunk pulled from Account Balance per allocate
+max_topup_per_day_usd = 3.0   # opt-in cap; only enforced when `bag budget enable` is on
+check_interval_seconds = 60
+
+[payments.erc8183]
+# Read by the Agent: it quotes the FIXED `price`, CLAMPS it to [min,max],
+# freezes a short-TTL offer, and EIP-191 signs it, pricing is rule-based, the
+# LLM never prices. price=0 is FREE and is supported by the canonical stack.
+currency = "0xcE24439F2D9C6a2289F741120FE202248B666666"  # U token address in EIP-55 form (fix 2026-09-02 H25: the SDK registry form; signed into every quote)
+# All prices are in wei of the currency token. U has 18 decimals (not 6 like USDC).
+price = "100000000000000000"                    # wei; 0 = FREE (zero token escrow)
+# fix 2026-09-02 H24: bounds were 0 and unbounded on mainnet (the clamp was an identity). Floor = the list
+# price, so a lost `price` line clamps back to it instead of quoting FREE; ceiling = 10x the list price.
+min_price = "100000000000000000"               # wei; clamp floor (0.1 U = the list price)
+max_price = "1000000000000000000"              # wei; clamp ceiling (1 U)
+quote_ttl_seconds = 900                        # seconds a signed quote stays valid; SDK caps at 900 (~15min work window)
+default_estimated_completion_seconds = 600
+poll_interval_seconds = 30
+auto_settle = false                            # opt-in: detect dispute-window-elapsed → settle
+
+[storage]
+# Deliverables are written to local disk (file://); path from STORAGE_LOCAL_PATH.
+# fix 2026-09-03 H312: the previous "offline-dev only, does NOT survive deploy" label was wrong for this
+# deployment. This is the live store: the deliverable file is served over https by the front end and that
+# URL is what the submit writes on chain, so the URL is anchored and the content stays mutable on the host.
+# The content hash anchor is the Greenfield mirror under greenfield-spike/, which needs gas on its writer
+# key before it can anchor anything.
+kind = "local"
+
+
+[payments.x402]
+# Optional: PIN the trusted Pieverse pay-to address. Leave empty, `bag llm
+# topup` / auto-topup auto-discover it from the hardcoded, SIWE-authenticated
+# topup endpoint (validated chain + U asset). Set a value only to pin a
+# specific recipient; the generic x402 buyer still never trusts an un-pinned
+# payTo from an arbitrary URL.
+expected_recipient = ""
+allowed_hosts = ["llm.pieverse.io"]
+
+[payments.x402_seller]
+# Public seller rail mounted at /x402. Credentials stay in
+# <workspace>/.studio/.env.local and are issued per B402 environment.
+enabled = true
+# Decimal USD string; "0" is explicit FREE passthrough and bypasses B402.
+# fix 2026-09-03 H26: the two rails are priced an order of magnitude apart for the same
+# deliverable and no file said why. The escrow rail above quotes 100000000000000000 wei,
+# which is 0.1 U at 18 decimals, and this line quotes 0.01 USD. The escrow rail is the
+# one that has ever taken money: it carries the signed quote, the on-chain funding, the
+# dispute window and the settle step. This rail is a per-call passthrough and is dormant
+# on every agent (no B402 credential is configured), so the number below has never been
+# charged to anyone. Read it as scaffold, not as a competing price. Aligning the two, or
+# writing the justification into the entry copy, is an operator decision on a live price.
+price_usd = "0.01"
+# v1 supports United Stables (U) through EIP-3009 only.
+assets = ["U"]
+# Empty means the agent wallet receives payment.
+# fix 2026-09-03 H310: pay_to binds THIS rail only. The ERC-8183 escrow rail has no pay_to key anywhere in
+# this file: settlement releases to the [wallet] address above.
+pay_to = ""
+# Payment settles before work; this bounds only the post-settlement work.
+work_timeout_seconds = 60
+# Optional Bazaar metadata can be added later as scalar JSON fields under
+# [payments.x402_seller.bazaar]: info_json, schema_json, description,
+# and route_template.
+
+[identity]
+# fix 2026-09-03 H313: the register tx below succeeded (receipt status 1) at the block time given.
+# The CLI 300 s receipt wait expired first, so it left a permanent "pending" block behind a landed
+# registration. Rewritten to the settled shape the CLI writeback produces on a completed register
+# (studio-cli identityWriteback: it deletes every pending_* key and writes endpoint, registered_at,
+# agent_id and last_register_tx). Nothing in the agent runtime reads this table.
+endpoint = "https://agents.chainhelix.io/yieldopt"
+agent_id = 269226
+registered_at = "2026-08-17T19:37:53.000Z"
+last_register_tx = "0xa18771d4f58e4277b2b456bc92c221de5d0fdfd767326181babc2d43bc1d16d7"
