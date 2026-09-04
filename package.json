@@ -1,0 +1,14 @@
+{
+  "name": "chainhelix-agents",
+  "private": true,
+  "version": "1.0.0",
+  "engines": { "node": ">=20" },
+  "type": "module",
+  "description": "Marketplace for on-chain service agents on BNB Smart Chain, with four deterministic seller agents and a command-line hire client.",
+  "scripts": {
+    "hire": "node scripts/hire.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.55.0"
+  }
+}
