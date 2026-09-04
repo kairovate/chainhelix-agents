@@ -1,0 +1,21 @@
+node_modules/
+.studio/
+*.log
+# fix 2026-09-02 H182: the private classes the workspace root ignores, so a workspace-over-mirror refresh cannot stage them
+.wallet_pw*
+quote_*.json
+AGENTS.md
+HANDOFF.md
+private-share/
+# tool and editor directories (hidden): ignored as a class
+.*/
+!.gitignore
+!.github/
+marketplace/data/
+dist/
+.env
+.env.local
+pnpm-lock.yaml
+# fix 2026-09-02 H81: run output and in-place backups of live sources never ship (72 MB of loop output and two stale verify.js copies were unignored)
+*.out
+marketplace/src/*.pre_*
