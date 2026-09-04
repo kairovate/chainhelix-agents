@@ -1,0 +1,7 @@
+{
+  "task_description": "{\"goal\": \"Compute loan health and liquidation prices per the committed Advantage Report task sheet\", \"collateral\": {\"BTCB\": {\"amount\": 0.5, \"liqThreshold\": 0.78}, \"ETH\": {\"amount\": 5, \"liqThreshold\": 0.8}}, \"debt\": {\"USDT\": 25000}, \"prices\": {\"BTCB\": 65335.99, \"ETH\": 1937.51, \"USDT\": 1}, \"alertHF\": 1.5, \"criticalHF\": 1.1}",
+  "terms": {
+    "deliverables": "health factor report with per-asset liquidation prices",
+    "quality_standards": "deterministic arithmetic, health factor to 4 decimals"
+  }
+}

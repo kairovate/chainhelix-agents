@@ -1,0 +1,109 @@
+{
+  "tool": "situation_report",
+  "args": {
+    "chain": "bnb"
+  },
+  "requestedAt": "2026-08-19T14:13:58.000Z",
+  "elapsedMs": 8152,
+  "http": 200,
+  "priceAtomicUsdt": "50000000000000000",
+  "payToDeltaUsdt": 0.05,
+  "payer": "0xd72C7B5398A4BA1Ea9F77DC51fedaa074EB1E3C9",
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"generated\":1787148846147,\"chains\":[{\"chain\":\"bnb\",\"lastPrice\":605.21,\"regime\":\"ranging\",\"regimeAgeHours\":60,\"range14dPct\":6.02,\"volRatio24hVs14d\":0.6,\"walls\":{\"nearestSupport\":{\"price\":586.172,\"timeframe\":\"1d\",\"touches\":5,\"strength\":18.7},\"nearestResistance\":{\"price\":609.346667,\"timeframe\":\"1d\",\"touches\":3,\"strength\":11.28},\"distToSupportPct\":3.226,\"distToResistancePct\":0.6},\"largeTransfers\":{\"windowHours\":24,\"transfers\":25,\"totalUsd\":31925575,\"exchangeTouching\":0},\"botActivity\":[{\"type\":\"nft_mev\",\"windowHours\":24,\"count\":104,\"weeklyPaceSameWindow\":82.4},{\"type\":\"jit\",\"windowHours\":24,\"count\":235,\"weeklyPaceSameWindow\":135.4},{\"type\":\"arbitrage\",\"windowHours\":24,\"count\":287983,\"weeklyPaceSameWindow\":238060.1},{\"type\":\"frontrun\",\"windowHours\":24,\"count\":8674,\"weeklyPaceSameWindow\":7162.3},{\"type\":\"liquidation\",\"windowHours\":24,\"count\":1,\"weeklyPaceSameWindow\":2},{\"type\":\"backrun\",\"windowHours\":24,\"count\":52097,\"weeklyPaceSameWindow\":37256.1},{\"type\":\"sandwich\",\"windowHours\":24,\"count\":253,\"weeklyPaceSameWindow\":294.4}]}],\"bitcoinQueue\":{\"pendingTransactions\":79516,\"fastestFee\":3,\"median30d\":86132,\"p90_30d\":93738}}"
+        }
+      ],
+      "structuredContent": {
+        "generated": 1787148846147,
+        "chains": [
+          {
+            "chain": "bnb",
+            "lastPrice": 605.21,
+            "regime": "ranging",
+            "regimeAgeHours": 60,
+            "range14dPct": 6.02,
+            "volRatio24hVs14d": 0.6,
+            "walls": {
+              "nearestSupport": {
+                "price": 586.172,
+                "timeframe": "1d",
+                "touches": 5,
+                "strength": 18.7
+              },
+              "nearestResistance": {
+                "price": 609.346667,
+                "timeframe": "1d",
+                "touches": 3,
+                "strength": 11.28
+              },
+              "distToSupportPct": 3.226,
+              "distToResistancePct": 0.6
+            },
+            "largeTransfers": {
+              "windowHours": 24,
+              "transfers": 25,
+              "totalUsd": 31925575,
+              "exchangeTouching": 0
+            },
+            "botActivity": [
+              {
+                "type": "nft_mev",
+                "windowHours": 24,
+                "count": 104,
+                "weeklyPaceSameWindow": 82.4
+              },
+              {
+                "type": "jit",
+                "windowHours": 24,
+                "count": 235,
+                "weeklyPaceSameWindow": 135.4
+              },
+              {
+                "type": "arbitrage",
+                "windowHours": 24,
+                "count": 287983,
+                "weeklyPaceSameWindow": 238060.1
+              },
+              {
+                "type": "frontrun",
+                "windowHours": 24,
+                "count": 8674,
+                "weeklyPaceSameWindow": 7162.3
+              },
+              {
+                "type": "liquidation",
+                "windowHours": 24,
+                "count": 1,
+                "weeklyPaceSameWindow": 2
+              },
+              {
+                "type": "backrun",
+                "windowHours": 24,
+                "count": 52097,
+                "weeklyPaceSameWindow": 37256.1
+              },
+              {
+                "type": "sandwich",
+                "windowHours": 24,
+                "count": 253,
+                "weeklyPaceSameWindow": 294.4
+              }
+            ]
+          }
+        ],
+        "bitcoinQueue": {
+          "pendingTransactions": 79516,
+          "fastestFee": 3,
+          "median30d": 86132,
+          "p90_30d": 93738
+        }
+      }
+    }
+  }
+}

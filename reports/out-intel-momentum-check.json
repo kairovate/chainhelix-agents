@@ -1,0 +1,36 @@
+{
+ "tool": "market_state",
+ "args": {
+  "chain": "bnb"
+ },
+ "requestedAt": "2026-08-20T00:56:57.956Z",
+ "elapsedMs": 2914,
+ "http": 200,
+ "priceAtomicUsdt": "20000000000000000",
+ "response": {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+   "content": [
+    {
+     "type": "text",
+     "text": "{\"results\":[{\"chain\":\"bnb\",\"lastPrice\":629.38,\"regime\":\"trending\",\"regimeAgeHours\":8,\"range14dPct\":8.76,\"volRatio24hVs14d\":1.737}]}"
+    }
+   ],
+   "structuredContent": {
+    "results": [
+     {
+      "chain": "bnb",
+      "lastPrice": 629.38,
+      "regime": "trending",
+      "regimeAgeHours": 8,
+      "range14dPct": 8.76,
+      "volRatio24hVs14d": 1.737
+     }
+    ]
+   }
+  }
+ },
+ "settleTx": "0x2df763b244eea206cfbe0eb2f04d48074f4c1cfbf7e1ca7d837f276c38f88456",
+ "settleAmountAtomicUsdt": "20000000000000000"
+}

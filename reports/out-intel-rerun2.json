@@ -1,0 +1,213 @@
+{
+ "ranAt": "2026-08-24T16:09:51.262975Z",
+ "chain": "bnb",
+ "method": "two-call bundle situation_report + wall_map, paid over b402, frozen checklist unchanged",
+ "paidRequestMs": {
+  "situation_report": 5260,
+  "wall_map": 2236
+ },
+ "score": {
+  "C1": true,
+  "C2": true,
+  "C3": true,
+  "C4": true,
+  "C5": true
+ },
+ "responses": {
+  "situation_report": {
+   "generated": 1787587772048,
+   "chains": [
+    {
+     "chain": "bnb",
+     "lastPrice": 708.72,
+     "regime": "ranging",
+     "regimeAgeHours": 32,
+     "range14dPct": 21.56,
+     "volRatio24hVs14d": 1.601,
+     "momentum": {
+      "rsi14": {
+       "h1": 60.9,
+       "h4": 67.8,
+       "d1": 86.1
+      },
+      "macd": {
+       "h1": {
+        "histogram": 0.683632,
+        "rising": true,
+        "state": "bullish",
+        "cross": null
+       },
+       "h4": {
+        "histogram": -1.45418,
+        "rising": true,
+        "state": "bearish",
+        "cross": null
+       }
+      },
+      "trend4h": "bull",
+      "state": "neutral"
+     },
+     "walls": {
+      "nearestSupport": {
+       "price": 586.172,
+       "timeframe": "1d",
+       "touches": 5,
+       "strength": 18.2
+      },
+      "nearestResistance": {
+       "price": 745.515,
+       "timeframe": "1w",
+       "touches": 2,
+       "strength": 13.76
+      },
+      "distToSupportPct": 17.179,
+      "distToResistancePct": 5.334
+     },
+     "largeTransfers": {
+      "windowHours": 24,
+      "transfers": 52,
+      "totalUsd": 74073009,
+      "exchangeTouching": 0
+     },
+     "botActivity": [
+      {
+       "type": "arbitrage",
+       "windowHours": 24,
+       "count": 189635,
+       "weeklyPaceSameWindow": 254818.4
+      },
+      {
+       "type": "frontrun",
+       "windowHours": 24,
+       "count": 4345,
+       "weeklyPaceSameWindow": 7155.3
+      },
+      {
+       "type": "liquidation",
+       "windowHours": 24,
+       "count": 0,
+       "weeklyPaceSameWindow": 3.3
+      },
+      {
+       "type": "nft_mev",
+       "windowHours": 24,
+       "count": 31,
+       "weeklyPaceSameWindow": 97.3
+      },
+      {
+       "type": "backrun",
+       "windowHours": 24,
+       "count": 18441,
+       "weeklyPaceSameWindow": 39167.4
+      },
+      {
+       "type": "sandwich",
+       "windowHours": 24,
+       "count": 226,
+       "weeklyPaceSameWindow": 313.6
+      },
+      {
+       "type": "jit",
+       "windowHours": 24,
+       "count": 292,
+       "weeklyPaceSameWindow": 236
+      }
+     ]
+    }
+   ],
+   "bitcoinQueue": {
+    "pendingTransactions": 81210,
+    "fastestFee": 4,
+    "median30d": 84898,
+    "p90_30d": 93619
+   }
+  },
+  "wall_map": {
+   "results": [
+    {
+     "chain": "bnb",
+     "price": 707.76,
+     "nearestSupport": {
+      "price": 586.172,
+      "timeframe": "1d",
+      "touches": 5,
+      "strength": 18.2
+     },
+     "nearestResistance": {
+      "price": 745.515,
+      "timeframe": "1w",
+      "touches": 2,
+      "strength": 13.76
+     },
+     "distToSupportPct": 17.179,
+     "distToResistancePct": 5.334,
+     "supports": [
+      {
+       "price": 559.402857,
+       "timeframe": "1d",
+       "touches": 7,
+       "strength": 24.08
+      },
+      {
+       "price": 586.172,
+       "timeframe": "1d",
+       "touches": 5,
+       "strength": 18.2
+      },
+      {
+       "price": 540.425,
+       "timeframe": "1w",
+       "touches": 2,
+       "strength": 14.56
+      },
+      {
+       "price": 570.185,
+       "timeframe": "1w",
+       "touches": 2,
+       "strength": 12.48
+      },
+      {
+       "price": 580.305,
+       "timeframe": "1w",
+       "touches": 2,
+       "strength": 11.68
+      }
+     ],
+     "resistances": [
+      {
+       "price": 745.515,
+       "timeframe": "1w",
+       "touches": 2,
+       "strength": 13.76
+      },
+      {
+       "price": 959.52,
+       "timeframe": "1w",
+       "touches": 1,
+       "strength": 5.36
+      },
+      {
+       "price": 1375.11,
+       "timeframe": "1w",
+       "touches": 1,
+       "strength": 4.32
+      },
+      {
+       "price": 726.08,
+       "timeframe": "1d",
+       "touches": 1,
+       "strength": 3.94
+      },
+      {
+       "price": 900.71,
+       "timeframe": "1w",
+       "touches": 1,
+       "strength": 3.68
+      }
+     ],
+     "updated": 1787587524340
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,7 @@
+{
+  "task_description": "{\"goal\": \"PancakeSwap v3 LP range health report per the marketplace input schema\", \"position\": {\"price\": 617.21, \"lowerPrice\": 580.0, \"upperPrice\": 640.0, \"feesEarnedUsd\": 42.5, \"positionValueUsd\": 12000, \"ageDays\": 21}, \"walls\": {\"574.8\": 8, \"593.52\": 9, \"605.89\": 8}}",
+  "terms": {
+    "deliverables": "LP range health report with edge annotations",
+    "quality_standards": "deterministic arithmetic, range status and distances exact"
+  }
+}
