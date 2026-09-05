@@ -58,6 +58,19 @@ function spoolFiles() {
 // Read that one record's history straight out of the state file with a streaming scan (1 MB window, no parse),
 // so the capped server still never holds the state. Kill switch: VERIFY_HISTORY_SCAN=0 (the one-entry answer comes back).
 const HISTORY_SCAN = process.env.VERIFY_HISTORY_SCAN !== "0";
+// 2026-09-06 (found by the MCP paid proof): the live pass re-probed only the map itself, so one failed probe during a
+// restart parked an agent on the backfill cadence (days) and, for four first-party agents, the paid hire_quote refused
+// for fifteen hours. Every record now carries lastLiveAt (its newest alive or hireable probe); an agent off the map
+// whose lastLiveAt is within VERIFY_RECHECK_HOURS keeps the live cadence through the map's recheck list.
+const RECHECK_HOURS = Number(process.env.VERIFY_RECHECK_HOURS ?? 24);
+const RECHECK_MAX = Number(process.env.VERIFY_RECHECK_MAX ?? 500);
+export function lastLiveOf(prev, rec) {
+  if (rec.status === "alive" || rec.status === "hireable") return rec.probedAt || Date.now();
+  if (prev && prev.lastLiveAt) return prev.lastLiveAt;
+  const h = (prev && prev.history) || rec.history || [];
+  for (let i = h.length - 1; i >= 0; i--) if (h[i].s === "alive" || h[i].s === "hireable") return h[i].t;
+  return null;
+}
 // fix 2026-09-05 H235 (option A): the newest sweep record for one id, read with the same streaming scan as
 // historyFromState, so GET /api/verify/:id can answer from the state without probing and without writing.
 // Returns null when the id has never been probed.
@@ -459,6 +472,7 @@ function mergeSaveLocked(touched) {
     // memory fix 2026-08-26: history is derived here, at merge time, so callers never parse the full
     // state file just to read one record's history (the state file is 112 MB, 400 MB parsed).
     if (!v.history) v.history = ((prev && prev.history) || []).concat([{ t: v.probedAt, s: v.status }]).slice(-10);
+    const ll = lastLiveOf(prev, v); if (ll) v.lastLiveAt = ll; // 2026-09-06: the recheck list is built from this
     if (!prev || (v.probedAt || 0) >= (prev.probedAt || 0)) cur.agents[k] = v; // newest probe wins
   }
   cur.updated = Date.now();
@@ -573,7 +587,9 @@ export async function livePass({ log = () => {} } = {}) {
   let out;
   if (lm && Array.isArray(lm.entries) && lm.entries.length && lm.entries.every((e) => "x402" in e)) {
     // the map carries name, owner and x402 (all probeAgent reads from an index entry): no index parse
-    out = await probeEntries(lm.entries.map((e) => ({ id: e.id, name: e.name, owner: e.owner, protocols: [], x402: !!e.x402, feedbacks: 0 })), { log: () => {} });
+    // 2026-09-06: plus the recheck list (dropped off the map within RECHECK_HOURS), same cadence, same probe
+    const again = Array.isArray(lm.recheck) ? lm.recheck : [];
+    out = await probeEntries(lm.entries.concat(again).map((e) => ({ id: e.id, name: e.name, owner: e.owner, protocols: [], x402: !!e.x402, feedbacks: 0 })), { log: () => {} });
   } else {
     let ids;
     if (lm && Array.isArray(lm.entries)) ids = lm.entries.map((e) => e.id);
@@ -583,7 +599,8 @@ export async function livePass({ log = () => {} } = {}) {
   }
   const counts = {};
   for (const r of out) counts[r.status] = (counts[r.status] || 0) + 1;
-  log(`live: ${out.length} re-probed ${JSON.stringify(counts)}`);
+  const rechecked = lm && Array.isArray(lm.recheck) ? lm.recheck.length : 0;
+  log(`live: ${out.length} re-probed ${JSON.stringify(counts)}` + (rechecked ? ` (${rechecked} rechecked from off the map)` : ""));
   return { probed: out.length, counts };
 }
 // liveMap: what an agent reads. Only alive and hireable entries, each with its age in seconds; a version
@@ -663,6 +680,13 @@ export function buildLiveMap(st) {
     })
     .sort((a, b) => { const ra = RUNG_RANK[a.rung ?? a.status] ?? 9, rb = RUNG_RANK[b.rung ?? b.status] ?? 9; return ra === rb ? a.id - b.id : ra - rb; }); // fix 2026-09-02 H73: verified first
   const version = entries.reduce((m, e) => Math.max(m, e.probedAt || 0), 0);
+  // 2026-09-06: agents that were on the map within RECHECK_HOURS and are not now (offline or dead on their newest
+  // probe); the live pass keeps probing them at its cadence so a transient failure does not park them for days
+  const recheckSince = now - RECHECK_HOURS * 3600e3;
+  const recheck = Object.values(st.agents)
+    .filter((r) => (r.status === "offline" || r.status === "dead") && r.lastLiveAt && r.lastLiveAt >= recheckSince)
+    .sort((a, b) => b.lastLiveAt - a.lastLiveAt).slice(0, RECHECK_MAX)
+    .map((r) => ({ id: r.id, name: r.name, owner: r.owner ?? null, x402: !!r.x402, status: r.status, probedAt: r.probedAt, lastLiveAt: r.lastLiveAt }));
   let registry = { total: null, indexedAt: null, indexed: null };
   const meta = loadJson(INDEX_META_FILE, null);
   if (meta && meta.indexed != null) registry = { total: meta.total, indexedAt: meta.indexedAt, indexed: meta.indexed };
@@ -692,7 +716,7 @@ export function buildLiveMap(st) {
   hireability.note = "newest test per agent; sellers.delivered = paid ERC-8183 jobs delivered; skillAgents.answeredOwnExample = agents that answered the example their own card declares; noExampleDeclared = cards that publish no example, so nothing a buyer could send was tested; unknownExample = tested before 2026-09-05";
   // fix 2026-09-02 H144: "probed 300,000" and "184 answering" are both true and read differently; the map says both.
   const scope = `${probedTotal} registrations probed from their own on-chain record; ${entries.length} answered on their newest probe (alive or hireable, ${probedTotal ? (100 * entries.length / probedTotal).toFixed(3) : "0"} percent); ${gatedTotal} declared an endpoint that answers but requires authentication (gated, not determinable by an anonymous probe); the rest declared no usable https endpoint or did not answer`;
-  return { version, generated: now, count: entries.length, probedTotal, gatedTotal, scope, registry, hireability, ...(METHOD_URL ? { method: METHOD_URL } : {}), ...(RUNG ? { rungs: RUNGS } : {}), ...(TRISTATE ? { tests: TESTS } : {}), entries }; // fix 2026-09-02 H318: legend; 2026-09-03 method
+  return { version, generated: now, count: entries.length, probedTotal, gatedTotal, scope, registry, hireability, recheck, recheckHours: RECHECK_HOURS, ...(METHOD_URL ? { method: METHOD_URL } : {}), ...(RUNG ? { rungs: RUNGS } : {}), ...(TRISTATE ? { tests: TESTS } : {}), entries }; // fix 2026-09-02 H318: legend; 2026-09-03 method
 }
 
 export function summary() {
