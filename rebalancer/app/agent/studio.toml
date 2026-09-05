@@ -69,11 +69,11 @@ check_interval_seconds = 60
 # LLM never prices. price=0 is FREE and is supported by the canonical stack.
 currency = "0xcE24439F2D9C6a2289F741120FE202248B666666"  # U token address in EIP-55 form (fix 2026-09-02 H25: the SDK registry form; signed into every quote)
 # All prices are in wei of the currency token. U has 18 decimals (not 6 like USDC).
-price = "100000000000000000"  # wei; 0 = FREE (zero token escrow)
+price = "500000000000000000"  # wei; 0 = FREE (zero token escrow). 0.5 U per job, operator 2026-09-05 (was 0.1 U, the hackathon test price)
 # fix 2026-09-02 H24: bounds were 0 and unbounded on mainnet (the clamp was an identity). Floor = the list
 # price, so a lost `price` line clamps back to it instead of quoting FREE; ceiling = 10x the list price.
-min_price = "100000000000000000"               # wei; clamp floor (0.1 U = the list price)
-max_price = "1000000000000000000"              # wei; clamp ceiling (1 U)
+min_price = "500000000000000000"               # wei; clamp floor (0.5 U = the list price)
+max_price = "5000000000000000000"              # wei; clamp ceiling (5 U, 10x the list price)
 quote_ttl_seconds = 900                        # seconds a signed quote stays valid; SDK caps at 900 (~15min work window)
 default_estimated_completion_seconds = 600
 poll_interval_seconds = 30
@@ -111,13 +111,15 @@ enabled = true
 # on every agent (no B402 credential is configured), so the number below has never been
 # charged to anyone. Read it as scaffold, not as a competing price. Aligning the two, or
 # writing the justification into the entry copy, is an operator decision on a live price.
-price_usd = "0.01"
+price_usd = "0.5"                              # per call on the B402 rail, same as the escrow job price (operator 2026-09-05; was 0.01 scaffold)
 # v1 supports United Stables (U) through EIP-3009 only.
 assets = ["U"]
 # Empty means the agent wallet receives payment.
 # fix 2026-09-03 H310: pay_to binds THIS rail only. The ERC-8183 escrow rail has no pay_to key anywhere in
 # this file: settlement releases to the [wallet] address above.
-pay_to = ""
+# Empty means the agent wallet receives payment. Set 2026-08-24 on operator order:
+# all ChainHelix income goes to the official payment wallet; the agent wallet keeps gas only.
+pay_to = "0xD4Fa54a346A7788BBc32c2229008b4305Ab7E3fE"
 # Payment settles before work; this bounds only the post-settlement work.
 work_timeout_seconds = 60
 # Optional Bazaar metadata can be added later as scalar JSON fields under

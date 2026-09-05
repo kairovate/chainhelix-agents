@@ -9,7 +9,8 @@
  * (the public agent URL the ERC-8183 rail already carries, minus its
  * `/erc8183` suffix), and only then the local-dev host:port fallback.
  *
- * The card advertises exactly two skills, `negotiate` and `notify_funded`.
+ * The card advertises the agent's WORK skill (generated from the shared strategy schema,
+ * with a worked example) plus the two commerce skills `negotiate` and `notify_funded`.
  * Authentication: on an AgentCore deploy `bag deploy provision-cognito`
  * injects `OAUTH_TOKEN_URL` / `OAUTH_SCOPE`, the card then carries the OAuth2
  * client-credentials scheme and the runtime's inbound JWT authorizer enforces
@@ -27,12 +28,15 @@
 
 import type { AgentCard, AgentSkill, SecurityScheme } from "@a2a-js/sdk";
 import { loadStudioToml } from "@bnbagent/studio-runtime/config";
+import { WORK_SCHEMAS, exampleTaskDescription, skillDescription, inputSchema } from "../vendor/strategies/schema.js";
+import type { WorkSchema } from "../vendor/strategies/schema.js";
 
 const NEGOTIATE: AgentSkill = {
   id: "negotiate",
   name: "Negotiate an ERC-8183 job",
   description:
-    'Send a data part {"skill": "negotiate", "task_description": "...", ' +
+    'Send a data part {"skill": "negotiate", "task_description": "<the job spec as the flat JSON object ' +
+    'shown in the work skill\'s examples>", ' +
     '"terms": {"deliverables": "...", "quality_standards": "..."}} (both ' +
     "terms keys are REQUIRED) and receive a " +
     "wallet-signed price quote (price, currency, negotiation_hash, provider_sig). " +
@@ -42,6 +46,26 @@ const NEGOTIATE: AgentSkill = {
   inputModes: ["application/json"],
   outputModes: ["application/json"],
 };
+
+/**
+ * fix 2026-09-05 (audit H68 completed): the WORK skill. Until now the card advertised only the
+ * two commerce skills, so a buyer could learn how to haggle and how to say "I funded it" and
+ * nothing about what a job must contain; the one outside hire (job 56680) guessed field names
+ * and was refused. The id, name, description, parameter table and the worked example all come
+ * from vendor/strategies/schema.ts, the same source the dispatcher's refusal hint is built from.
+ */
+function workSkill(category: WorkSchema["category"]): AgentSkill {
+  const s = WORK_SCHEMAS[category];
+  return {
+    id: s.category,
+    name: s.name,
+    description: skillDescription(category),
+    tags: s.tags,
+    examples: [exampleTaskDescription(category)],
+    inputModes: ["application/json"],
+    outputModes: ["application/json"],
+  };
+}
 
 const NOTIFY_FUNDED: AgentSkill = {
   id: "notify_funded",
@@ -144,7 +168,7 @@ export function publicBaseUrl(): string {
 
 /** Build the A2A AgentCard, gating ERC-8183 skills on the configured rail. */
 export function buildAgentCard(
-  opts: { commerceSkills?: boolean } = {},
+  opts: { commerceSkills?: boolean; category?: WorkSchema["category"] } = {},
 ): AgentCard {
   const name = agentName();
   const extra: Partial<AgentCard> = {};
@@ -156,7 +180,7 @@ export function buildAgentCard(
   }
   return {
     name,
-    description: `ERC-8183 seller agent (${name}): negotiate + notify_funded over A2A.`,
+    description: `${name}: deterministic on-chain work, sold per job through ERC-8183 escrow (negotiate + notify_funded over A2A) and per call on the B402 rail (/x402). The work skill on this card states exactly what a job must contain.`,
     url: publicBaseUrl(),
     version: "1.0.0",
     protocolVersion: "0.3.0",
@@ -167,11 +191,30 @@ export function buildAgentCard(
     // only send plain text, never the {"skill": ...} DataPart these skills
     // require, and its streaming view expects Task events). Test locally
     // with curl / an A2A client sending a DataPart (see the operating skill).
-    capabilities: { streaming: false },
+    capabilities: {
+      streaming: false,
+      // fix 2026-09-05 (brief part 3, the bridge): A2A has no per-skill body schema, so the work
+      // skill's JSON Schema rides as an extension, in the same {inputSchema} shape the MCP product
+      // publishes per tool. Generated from vendor/strategies/schema.ts like everything else here.
+      ...(opts.category
+        ? {
+            extensions: [
+              {
+                uri: "https://agents.chainhelix.io/ext/skill-input-schema/v1",
+                description: "JSON Schema (draft 2020-12) of the task_description each work skill accepts, keyed by skill id",
+                required: false,
+                params: { [opts.category]: inputSchema(opts.category) },
+              },
+            ],
+          }
+        : {}),
+    },
     defaultInputModes: ["application/json"],
     defaultOutputModes: ["application/json"],
-    skills:
-      opts.commerceSkills === false ? [] : [NEGOTIATE, NOTIFY_FUNDED],
+    skills: [
+      ...(opts.category ? [workSkill(opts.category)] : []),
+      ...(opts.commerceSkills === false ? [] : [NEGOTIATE, NOTIFY_FUNDED]),
+    ],
     ...extra,
   };
 }

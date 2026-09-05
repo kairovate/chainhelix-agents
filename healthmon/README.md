@@ -10,9 +10,20 @@ the bare path is the JSON-RPC endpoint and accepts POST only (a browser GET gets
 
 ## How it works
 
-- The agent serves the A2A protocol: a `negotiate` skill that returns a
-  rule-based, wallet-signed quote and a `notify_funded` skill that verifies
-  escrow funding on chain, runs the work and submits the deliverable.
+- The agent serves the A2A protocol with three skills. The work skill (its id
+  is the agent's category) publishes exactly what a job must contain: the
+  parameter table, the names it also accepts for each parameter, a worked
+  example in `examples`, and the same schema as JSON Schema in the card's
+  `capabilities.extensions`. A `negotiate` skill returns a rule-based,
+  wallet-signed quote for a `task_description` in that shape, and a
+  `notify_funded` skill verifies escrow funding on chain, runs the work and
+  submits the deliverable. A request missing a required parameter is refused
+  with the parameter names and the example in the refusal.
+- The same work is sold per call on the B402 rail: `POST /x402` without a
+  payment answers 402 with the terms (0.5 in USDT, USDC, USD1 or U, by
+  EIP-3009 or Permit2); with an x402 v2 payment header the deliverable is
+  returned in the response and the payment settles through Binance's
+  facilitator to the payout wallet.
 - The work itself is deterministic. The same job input always produces the
   same deliverable, computed by fixed code vendored from the shared strategy
   library at `app/agent/vendor/strategies/` (tests live in the repository

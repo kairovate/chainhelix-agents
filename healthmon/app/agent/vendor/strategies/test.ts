@@ -6,6 +6,9 @@ import { yieldOpt } from "./yieldopt.js";
 import { health } from "./health.js";
 import { makeRunWork, _setEngine } from "./dispatch.js";
 import { parseKeyValues } from "./parseJob.js";
+import { WORK_SCHEMAS, paramHint, exampleTaskDescription, inputSchema } from "./schema.js";
+import { renderCatalog, renderWorkSchemas } from "./emit_catalog_schema.js";
+import { readFileSync, existsSync } from "fs";
 
 let pass = 0, fail = 0;
 function ok(name: string, cond: boolean, detail?: unknown) {
@@ -231,8 +234,59 @@ delete process.env.STRATEGY_STRICT_INPUT;
   const kv = parseKeyValues("POSITIONCREW_BOUNDED_GRID_V1; request=pancake-grid-119215728; chain=56; pair=WBNB/USDT; mid=691.652751; lower=677.819696; upper=705.485806; levels=5; capitalUsd=1000.00");
   ok("parser: key=value carrier (job 56680 shape) yields typed params", kv.chain === 56 && kv.pair === "WBNB/USDT" && kv.mid === 691.652751 && kv.levels === 5 && kv.capitalUsd === 1000 && kv.request === "pancake-grid-119215728");
   const kvJob = JSON.parse(await runs.grid('JOB CONTEXT:\n{"task":"POSITIONCREW_BOUNDED_GRID_V1; request=pancake-grid-119215728; chain=56; pair=WBNB/USDT; mid=691.652751; lower=677.819696; upper=705.485806; levels=5; capitalUsd=1000.00","terms":{"deliverables":"grid"}}'));
-  ok("dispatch: key=value task refuses with the expected keys named (was 'price must be a finite number' with no hint)", kvJob.ok === false && String(kvJob.error).includes("price") && String(kvJob.hint).includes("price, budgetUsd"));
-  const plain = parseKeyValues("no pairs here at all");
+  // 2026-09-05 (brief section 11 acceptance 1): with the DECLARED aliases (mid -> price, capitalUsd -> budgetUsd,
+  // lower/upper -> spanPct) this request is SERVED, with the numbers asserted, not merely ok === true.
+  ok("dispatch: the job 56680 key=value request is served through the declared aliases", kvJob.ok === true && kvJob.mark === 691.652751 && kvJob.budgetUsd === 1000 && kvJob.levelsPerSide === 5 && Math.abs(Number(kvJob.spanPct) - 2.0) < 0.01, kvJob);
+  ok("dispatch: served grid has 5 buys below and 5 sells above the mark", Array.isArray(kvJob.buys) && kvJob.buys.length === 5 && kvJob.buys.every((b: { price: number }) => b.price < 691.652751) && Array.isArray(kvJob.sells) && kvJob.sells.length === 5 && kvJob.sells.every((b: { price: number }) => b.price > 691.652751), kvJob);
+  ok("dispatch: served grid ladders the whole budget", Math.abs(Number(kvJob.allocatedUsd) - 1000) < 1, kvJob.allocatedUsd);
+  process.env.STRATEGY_INPUT_ALIASES = "0";
+  const kvOff = JSON.parse(await runs.grid('JOB CONTEXT:\n{"task":"mid=691.652751; capitalUsd=1000","terms":{"deliverables":"grid"}}'));
+  ok("kill switch: STRATEGY_INPUT_ALIASES=0 restores the exact-name refusal, hint still names price and budgetUsd", kvOff.ok === false && String(kvOff.error).includes("price") && String(kvOff.hint).includes("price"));
+  delete process.env.STRATEGY_INPUT_ALIASES;
+  const canon = JSON.parse(await runs.grid('JOB CONTEXT:\n{"task":"{\\"price\\":100,\\"mid\\":5,\\"budgetUsd\\":1000,\\"budget\\":1}","terms":{"deliverables":"grid"}}'));
+  ok("aliases: the canonical name wins when both are present", canon.ok === true && canon.mark === 100 && canon.budgetUsd === 1000, canon);
+  const rbAlias = JSON.parse(await runs.rebalancing('JOB CONTEXT:\n{"task":"{\\"positions\\":{\\"BTC\\":1,\\"ETH\\":10},\\"weights\\":{\\"BTC\\":0.5,\\"ETH\\":0.5},\\"marks\\":{\\"BTC\\":60000,\\"ETH\\":2000}}","terms":{"deliverables":"plan"}}'));
+  ok("aliases: rebalancing positions/weights/marks are served", rbAlias.ok === true && rbAlias.portfolioUsd === 80000, rbAlias);
+  const yAlias = JSON.parse(await runs.yield('JOB CONTEXT:\n{"task":"{\\"vaults\\":{\\"a\\":{\\"apyPct\\":10}},\\"budgetUsd\\":1000}","terms":{"deliverables":"alloc"}}'));
+  ok("aliases: yield vaults/budgetUsd are served", yAlias.ok === true, yAlias);
+  const hAlias = JSON.parse(await runs.health('JOB CONTEXT:\n{"task":"{\\"deposits\\":{\\"ETH\\":{\\"amount\\":10,\\"liqThreshold\\":0.8}},\\"borrowed\\":{\\"USDT\\":10000},\\"marks\\":{\\"ETH\\":2000,\\"USDT\\":1}}","terms":{"deliverables":"hf"}}'));
+  ok("aliases: health deposits/borrowed/marks are served", hAlias.ok === true && typeof hAlias.healthFactor === "number", hAlias);
+  ok("aliases: every alias is printed in the refusal hint", (["rebalancing", "grid", "yield", "health"] as const).every((c) => WORK_SCHEMAS[c].params.every((q) => !q.aliases || q.aliases.every((a) => paramHint(c).includes(a)))));
+
+  // ---- fix 2026-09-05 (H68 completed): schema.ts is the one source for the card and the refusal.
+  // Every published example is served, every required parameter is named when missing, and the
+  // dispatcher's hint is byte-equal to what the card is generated from. Prompt shape is the one
+  // sellerCore builds: JOB CONTEXT then {"task": <task_description verbatim>, "terms": {...}}.
+  for (const cat of ["rebalancing", "grid", "yield", "health"] as const) {
+    const sch = WORK_SCHEMAS[cat];
+    const prompt = (task: string) => "You accepted and were paid for the following job. Produce the deliverable now.\n\nJOB CONTEXT:\n" + JSON.stringify({ task, terms: { deliverables: sch.name, quality_standards: "deterministic" } });
+    const served = JSON.parse(await (runs as Record<string, (p: string) => Promise<string>>)[cat](prompt(exampleTaskDescription(cat))));
+    ok(`schema ${cat}: the card's example task_description is served`, served.ok === true && served.category === cat, served);
+    for (const req of sch.params.filter((q) => q.required)) {
+      if (cat === "health" && (req.name === "collateral" || req.name === "debt")) continue; // either-or with position, covered by the H98 cases
+      const dropped = { ...sch.example }; delete dropped[req.name];
+      const r = JSON.parse(await (runs as Record<string, (p: string) => Promise<string>>)[cat](prompt(JSON.stringify(dropped))));
+      ok(`schema ${cat}: missing ${req.name} is refused and named`, r.ok === false && String(r.error).includes(req.name) && String(r.hint) === paramHint(cat), r);
+    }
+    ok(`schema ${cat}: hint carries the example`, paramHint(cat).includes(exampleTaskDescription(cat)));
+    ok(`schema ${cat}: every declared name is one the engine reads`, sch.params.every((q) => q.name in sch.example || !q.required));
+    const js = inputSchema(cat) as { properties: Record<string, unknown>; required: string[]; anyOf?: { required: string[] }[] };
+    const jsRequired = cat === "health" ? (js.anyOf ?? [])[0]?.required ?? [] : js.required; // sweep 2026-09-05: health states its two shapes as anyOf
+    ok(`schema ${cat}: the JSON Schema lists exactly the card's parameters`, Object.keys(js.properties).join() === sch.params.map((q) => q.name).join() && jsRequired.join() === sch.params.filter((q) => q.required).map((q) => q.name).join(), js);
+    ok(`schema ${cat}: the example satisfies the JSON Schema's required list`, jsRequired.every((n) => n in sch.example));
+    if (cat === "health") ok("schema health: the JSON Schema states the LP shape (position) as the second anyOf branch and requires nothing at the top", js.required.length === 0 && JSON.stringify((js.anyOf ?? [])[1]) === JSON.stringify({ required: ["position"] }));
+  }
+  // the storefront's Job input table is generated from the same source; a stale catalog.json fails here.
+  // Only where the catalog exists next to this tree (the vendored copies inside the agents have none).
+  const catalogPath = new URL("../marketplace/catalog.json", import.meta.url).pathname;
+  if (existsSync(catalogPath)) {
+    const cur = readFileSync(catalogPath, "utf8");
+    ok("schema: marketplace/catalog.json inputSchema is current with schema.ts (run strategies/emit_catalog_schema.ts)", renderCatalog(cur) === cur);
+    const wsPath = catalogPath.replace(/catalog\.json$/, "work_schemas.json");
+    ok("schema: marketplace/work_schemas.json (the MCP bridge) is current with schema.ts", existsSync(wsPath) && readFileSync(wsPath, "utf8") === renderWorkSchemas(cur));
+  }
+
+  const plain = parseKeyValues("no pairs here");
   ok("parser: prose yields no key=value params", Object.keys(plain).length === 0);
 
   // ---- fix 2026-09-03 H100 H176 H288: one regression case per LOW-tier strategy fix in this run.

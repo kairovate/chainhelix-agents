@@ -13,6 +13,7 @@ import { rebalance } from "./rebalance.js";
 import { grid } from "./grid.js";
 import { yieldOpt } from "./yieldopt.js";
 import { health } from "./health.js";
+import { paramHint, applyAliases } from "./schema.js";
 
 export type Category = "rebalancing" | "grid" | "yield" | "health";
 
@@ -30,12 +31,14 @@ export function _setEngine(category: Category, engine: Engine | null): void {
   ENGINES[category] = engine ?? originals[category];
 }
 
-/** fix 2026-09-02 H68: the expected keys per category, attached to every input refusal. */
+/** fix 2026-09-02 H68, completed 2026-09-05: the hint is generated from schema.ts, the same
+ * source the public agent card's work skill and its example come from, so the refusal, the card
+ * and the engine cannot drift apart again. */
 const PARAM_HINTS: Record<Category, string> = {
-  rebalancing: "expected params: holdings {SYMBOL: amount}, targets {SYMBOL: weight, summing to 1}, prices {SYMBOL: usd}; optional driftThresholdPct, minTradeUsd",
-  grid: "expected params: price, budgetUsd; optional levels, spanPct, walls {price: touches}, wallBandPct",
-  yield: "expected params: pools {name: {apyPct, riskScore?, tvlUsd?}}, capitalUsd; optional maxPerPoolPct, riskAversion, tvlCapPct",
-  health: "expected params: collateral {SYMBOL: {amount, liqThreshold}}, debt {SYMBOL: amount}, prices {SYMBOL: usd}; optional alertHF, criticalHF; or position {price, lowerPrice, upperPrice} for LP range health",
+  rebalancing: paramHint("rebalancing"),
+  grid: paramHint("grid"),
+  yield: paramHint("yield"),
+  health: paramHint("health"),
 };
 
 /**
@@ -44,7 +47,9 @@ const PARAM_HINTS: Record<Category, string> = {
  * uses OBJECTS keyed by symbol/name; engines keep their array shapes. Both
  * forms accepted; arrays pass through untouched.
  */
-function normalize(category: Category, p: Record<string, unknown>): Record<string, unknown> {
+function normalize(category: Category, raw: Record<string, unknown>): Record<string, unknown> {
+  // 2026-09-05: declared aliases first (published on the card), canonical name wins when both are present
+  const p = applyAliases(category, raw).params;
   const out = { ...p };
   const toArr = (v: unknown, shape: (k: string, val: unknown) => Record<string, unknown>) =>
     v !== null && typeof v === "object" && !Array.isArray(v)
