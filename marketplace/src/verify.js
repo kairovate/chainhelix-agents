@@ -9,14 +9,19 @@
 //   offline     endpoint declared but the agent card did not load on this probe
 //   alive       agent card loaded (the agent is running and describes itself)
 //   hireable    alive AND the card declares a negotiate skill (ERC-8183 seller) or x402 is supported
+//   gated       endpoint declared and it answers, but requires authentication (HTTP 401/403); whether the
+//               agent works is not determinable by an anonymous probe (fix 2026-09-05, brief part 4;
+//               on only with VERIFY_RESOLVE_TEMPLATES=1, which also substitutes {agentId}-style endpoint
+//               templates with the registry id before probing; rawEndpoint keeps the declared form)
 // Trust rung on the live map (fix 2026-09-02 H73), a separate field so status keeps its meaning:
 //   rung        verified | hireable | alive; verified = the newest test-hire is a paid ERC-8183 job that
 //               was hired, funded and delivered (tx hashes in the test record). VERIFY_RUNG=0 omits it.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, openSync, writeSync, readSync, closeSync, rmSync, statSync, readdirSync, unlinkSync } from "fs";
 import { dirname } from "path";
-import { SCAN_API, CHAIN_ID, RPC_URL } from "./config.js";
+import { SCAN_API, CHAIN_ID, scanHeaders } from "./config.js";
+import { rpcRead } from "./rpc.js"; // 2026-09-05
 import { CATALOG } from "./catalog.js";
-import { probeAllowed, extractEndpoint, cardUrl } from "./probe.js";
+import { probeAllowed, extractEndpoint, cardUrl, resolveEndpointTemplate, cardFailureStatus, RESOLVE_TEMPLATES } from "./probe.js";
 
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 const IPFS_FOLLOW = process.env.VERIFY_IPFS_FOLLOW !== "0"; // fix 2026-09-03 H89, see readMetadata
@@ -53,6 +58,49 @@ function spoolFiles() {
 // Read that one record's history straight out of the state file with a streaming scan (1 MB window, no parse),
 // so the capped server still never holds the state. Kill switch: VERIFY_HISTORY_SCAN=0 (the one-entry answer comes back).
 const HISTORY_SCAN = process.env.VERIFY_HISTORY_SCAN !== "0";
+// fix 2026-09-05 H235 (option A): the newest sweep record for one id, read with the same streaming scan as
+// historyFromState, so GET /api/verify/:id can answer from the state without probing and without writing.
+// Returns null when the id has never been probed.
+// sweep 2026-09-05: the record's end was found by "the next record's key, else the last `}}`". For the LAST record
+// in the file that heuristic kept one brace of the enclosing objects, JSON.parse failed and the route answered
+// "not probed yet" for a registration that had been probed (id 335154, the newest, at the time of the sweep). The
+// end is now found by walking the braces from the record's own opening one, string-aware, which also removes the
+// dependence on the next key's shape.
+export function objectEnd(text, from) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = from; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) return i + 1; }
+  }
+  return -1;
+}
+export function recordFromState(id, file = STATE_FILE) {
+  if (!/^\d+$/.test(String(id)) || !existsSync(file)) return null;
+  const key = `"${id}":{"id":${id},`;
+  const WIN = 16384;
+  const fd = openSync(file, "r");
+  try {
+    const buf = Buffer.alloc(1 << 20);
+    let s = "";
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, null);
+      if (n > 0) s += buf.toString("latin1", 0, n);
+      const at = s.indexOf(key);
+      if (at >= 0) {
+        if (s.length - at < WIN && n > 0) continue;
+        const start = at + key.length - `{"id":${id},`.length;
+        const end = objectEnd(s, start);
+        if (end < 0 || end - start > WIN) return null;
+        try { return JSON.parse(Buffer.from(s.slice(start, end), "latin1").toString("utf8")); } catch { return null; }
+      }
+      if (n === 0) return null;
+      if (s.length > WIN) s = s.slice(-WIN);
+    }
+  } finally { closeSync(fd); }
+}
 export function historyFromState(id) {
   if (!HISTORY_SCAN || !/^\d+$/.test(String(id)) || !existsSync(STATE_FILE)) return [];
   const key = `"${id}":{"id":${id},`;
@@ -213,7 +261,7 @@ async function fetchJson(url, ms, follow) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: follow ? "follow" : "manual", headers: { Accept: "application/json" } });
+    const res = await fetch(url, { signal: ctrl.signal, redirect: follow ? "follow" : "manual", headers: scanHeaders(url) }); // 2026-09-05: the Pro key only when url is the directory
     if (res.status >= 300 && res.status < 400) throw new Error("redirect " + res.status);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const reader = res.body.getReader();
@@ -320,10 +368,9 @@ async function tokenUri(id) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const res = await fetch(RPC_URL, { signal: ctrl.signal, method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: CATALOG.registry, data }, "latest"] }) });
-    const body = await jsonCapped(res, RPC_MAX_BYTES); // fix 2026-09-03 H238
-    const hex = body.result;
+    // 2026-09-05: read through rpc.js (primary, then the fallback on an availability-shaped failure); the byte cap
+    // (fix 2026-09-03 H238) is passed through.
+    const hex = await rpcRead("eth_call", [{ to: CATALOG.registry, data }, "latest"], { signal: ctrl.signal, maxBytes: RPC_MAX_BYTES });
     if (!hex || hex === "0x") return null;
     const buf = Buffer.from(hex.slice(2), "hex");
     const len = Number(BigInt("0x" + buf.subarray(32, 64).toString("hex")));
@@ -368,7 +415,12 @@ export async function probeAgent(entry) {
   try { meta = await readMetadata(uri); } catch (e) { rec.reason = "registration: " + e.message; }
   if (!meta) { rec.reason = rec.reason || "registration file unreadable"; rec.ms = Date.now() - started; return rec; }
   rec.declaredServices = Array.isArray(meta.services) ? meta.services.length : 0;
-  const endpoint = extractEndpoint(meta);
+  const declared = extractEndpoint(meta);
+  // fix 2026-09-05 (brief part 4): substitute an endpoint template ({agentId} and kin) with this
+  // registration's own id before probing; the declared form is kept in rawEndpoint. Flag-gated, see header.
+  const resolved = RESOLVE_TEMPLATES ? resolveEndpointTemplate(declared, entry.id) : { url: declared, raw: null };
+  const endpoint = resolved.url;
+  if (resolved.raw) rec.rawEndpoint = resolved.raw;
   if (!endpoint || !probeAllowed(endpoint)) { rec.reason = endpoint ? "endpoint not probeable" : "no https endpoint declared"; rec.ms = Date.now() - started; return rec; }
   rec.endpoint = cardUrl(endpoint);
   try {
@@ -377,8 +429,9 @@ export async function probeAgent(entry) {
     rec.status = rec.card ? ((rec.card.negotiate || entry.x402) ? "hireable" : "alive") : "offline";
     if (!rec.card) rec.reason = "card not an object";
   } catch (e) {
-    rec.status = "offline";
-    rec.reason = "card: " + e.message;
+    // fix 2026-09-05: 401/403 is `gated` (answers, needs auth, not determinable anonymously), flag-gated.
+    rec.status = cardFailureStatus(e);
+    rec.reason = (rec.status === "gated" ? "card: " + e.message + " (authentication required; not determinable by an anonymous probe)" : "card: " + e.message);
   }
   rec.ms = Date.now() - started;
   return rec;
@@ -519,7 +572,7 @@ export async function livePass({ log = () => {} } = {}) {
   const lm = loadJson(LIVE_FILE, null);
   let out;
   if (lm && Array.isArray(lm.entries) && lm.entries.length && lm.entries.every((e) => "x402" in e)) {
-    // the map carries name, owner and x402 (all probeAgent reads from an index entry): no index parse at all
+    // the map carries name, owner and x402 (all probeAgent reads from an index entry): no index parse
     out = await probeEntries(lm.entries.map((e) => ({ id: e.id, name: e.name, owner: e.owner, protocols: [], x402: !!e.x402, feedbacks: 0 })), { log: () => {} });
   } else {
     let ids;
@@ -564,6 +617,7 @@ export const TESTS = {
   results: { delivered: "the agent returned a deliverable", not_delivered: "the agent answered the call but returned no deliverable", negotiate_refused: "the agent refused the quote request",
     run_cap_reached: "our test budget for the run ended before this agent was tested to completion; not a verdict on the agent", error: "the test failed on our side before a verdict; not a verdict on the agent" },
   delivered: "true = delivered; false = asked and did not deliver or refused; null = no verdict (run_cap_reached, error)",
+  exampleDeclared: "skill_call only, since 2026-09-05: true = the request we sent was the example the agent's own card declares; false = the card declares no example, so we sent a generic sentence and the result is a liveness check, not a hire; absent = tested before the field existed",
   evidence: "set only where a Greenfield object was written for the test record (delivered and negotiate_refused runs); null elsewhere",
   ...(process.env.VERIFY_TEST_AGE !== "0" ? { ageDays: "how old this test verdict is, in days, at the time the map was generated. The entry's own ageSeconds is the age of the liveness probe and is unrelated: a fresh probe can sit beside a test verdict that is days old" } : {}), // fix 2026-09-03 H319
 };
@@ -595,7 +649,7 @@ export const REGISTRY_NOTE = "total is the count the 8004scan directory reports 
 const METHOD_URL = process.env.VERIFY_METHOD_URL || "";
 export function buildLiveMap(st) {
   const now = Date.now();
-  // last test-hire per agent (scripts/test_hire.mjs): did it actually deliver when asked, and how fast
+  // last test-hire per agent (scripts/test_hire.mjs): did it deliver when asked, and how fast
   const th = loadJson(new URL("../data/testhire.json", import.meta.url).pathname, { agents: {} }).agents || {};
   const entries = Object.values(st.agents)
     .filter((r) => r.status === "alive" || r.status === "hireable")
@@ -617,9 +671,28 @@ export function buildLiveMap(st) {
   registry = { ...registry, directoryTotal: registry.total, newestRegistrationAt: registry.indexedAt,
     note: REGISTRY_NOTE }; // fix 2026-09-03 H69: one constant, so summary() and the map cannot drift apart
   const probedTotal = Object.keys(st.agents).length;
+  // fix 2026-09-05 (brief part 4): the gated population is counted separately wherever totals are served;
+  // it is neither answered nor "did not answer", and the old scope sentence folded it into the latter.
+  let gatedTotal = 0; for (const r of Object.values(st.agents)) if (r.status === "gated") gatedTotal++;
+  // 2026-09-05 (build B4): the hireability count, from the newest test per agent. How many agents on this
+  // registry can be asked for work: sellers that delivered a paid job, and skill agents that answered
+  // the example their own card declares. Published here because nobody else measures it.
+  const hireability = { tested: 0, sellers: { tested: 0, delivered: 0, refused: 0 }, skillAgents: { tested: 0, exampleDeclared: 0, answeredOwnExample: 0, noAnswerOwnExample: 0, noExampleDeclared: 0, unknownExample: 0 } };
+  for (const recs of Object.values(th)) {
+    const t = Array.isArray(recs) ? recs[0] : null; if (!t) continue;
+    hireability.tested++;
+    if (t.kind === "erc8183_hire") { hireability.sellers.tested++; if (t.result === "delivered") hireability.sellers.delivered++; if (t.result === "negotiate_refused") hireability.sellers.refused++; }
+    else if (t.kind === "skill_call") {
+      hireability.skillAgents.tested++;
+      if (t.exampleDeclared === true) { hireability.skillAgents.exampleDeclared++; if (t.delivered) hireability.skillAgents.answeredOwnExample++; else hireability.skillAgents.noAnswerOwnExample++; }
+      else if (t.exampleDeclared === false) hireability.skillAgents.noExampleDeclared++;
+      else hireability.skillAgents.unknownExample++;
+    }
+  }
+  hireability.note = "newest test per agent; sellers.delivered = paid ERC-8183 jobs delivered; skillAgents.answeredOwnExample = agents that answered the example their own card declares; noExampleDeclared = cards that publish no example, so nothing a buyer could send was tested; unknownExample = tested before 2026-09-05";
   // fix 2026-09-02 H144: "probed 300,000" and "184 answering" are both true and read differently; the map says both.
-  const scope = `${probedTotal} registrations probed from their own on-chain record; ${entries.length} answered on their newest probe (alive or hireable, ${probedTotal ? (100 * entries.length / probedTotal).toFixed(3) : "0"} percent); the rest declared no usable https endpoint or did not answer`;
-  return { version, generated: now, count: entries.length, probedTotal, scope, registry, ...(METHOD_URL ? { method: METHOD_URL } : {}), ...(RUNG ? { rungs: RUNGS } : {}), ...(TRISTATE ? { tests: TESTS } : {}), entries }; // fix 2026-09-02 H318: legend; 2026-09-03 method
+  const scope = `${probedTotal} registrations probed from their own on-chain record; ${entries.length} answered on their newest probe (alive or hireable, ${probedTotal ? (100 * entries.length / probedTotal).toFixed(3) : "0"} percent); ${gatedTotal} declared an endpoint that answers but requires authentication (gated, not determinable by an anonymous probe); the rest declared no usable https endpoint or did not answer`;
+  return { version, generated: now, count: entries.length, probedTotal, gatedTotal, scope, registry, hireability, ...(METHOD_URL ? { method: METHOD_URL } : {}), ...(RUNG ? { rungs: RUNGS } : {}), ...(TRISTATE ? { tests: TESTS } : {}), entries }; // fix 2026-09-02 H318: legend; 2026-09-03 method
 }
 
 export function summary() {
