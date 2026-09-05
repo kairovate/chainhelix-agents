@@ -82,7 +82,9 @@ A card that declares negotiate and refuses every quote request is shown as `aliv
 ## 5. Cadence
 
 - Live pass: the alive and hireable set is re-probed about every 60 s (deadline from the start of the run,
-  floor 5 s between runs).
+  floor 5 s between runs). Since 2026-09-06 an agent that was on the map within the last 24 hours and is `offline`
+  or `dead` on its newest probe stays on this cadence (the map's `recheck` list, each record's `lastLiveAt`), so one
+  failed probe during a restart does not move it to the backfill cadence.
 - New registrations: every tenth live pass, newest first, stop at the first known id.
 - Backfill loop: the rest of the index in batches of 200, six at a time, 20 s between batches with backoff on
   failure; oldest probes first on later passes.
