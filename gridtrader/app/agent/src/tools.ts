@@ -107,7 +107,7 @@ export const LLM_READ_TOOLS: ToolSet = {
   balance_u: tool({
     // fix 2026-09-03 H18: this said "requires [u_token] in studio.toml". No such section
     // exists in this project (the config has [payments.erc8183], not [u_token]/[erc8004]/
-    // [erc8183]), and the tool does not read studio.toml at all: the U token address comes
+    // [erc8183]), and the tool does not read studio.toml: the U token address comes
     // from the SDK network table. Nothing to uncomment, nothing to add.
     description:
       "$U (payment token) balance of an address (defaults to the agent's own wallet).",

@@ -68,6 +68,7 @@
 import { makeRunWork } from "../vendor/strategies/dispatch.js";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import {
   GetSecretValueCommand,
   SecretsManagerClient,
@@ -453,7 +454,7 @@ async function main(): Promise<void> {
     network: defaultNetwork(),
     commerceSkills: rails.erc8183,
   });
-  const agentCard = buildAgentCard({ commerceSkills: rails.erc8183 });
+  const agentCard = buildAgentCard({ commerceSkills: rails.erc8183, category: "health" }); // fix 2026-09-05: the work skill on the card
   const seller = await X402Seller.create({
     cfg,
     runWork: x402Work(runWork),
@@ -465,6 +466,26 @@ async function main(): Promise<void> {
     // localhost fallback only suits local runs.
     resourceUrl: `${publicBaseUrl().replace(/\/$/, "")}${X402_SELL_PATH}`,
   });
+  // 2026-09-05 (operator: "should be same acceptance as our mcp, not just U"): the pay-per-call route takes the
+  // SAME assets the ChainHelix MCP takes (USDT, USDC, USD1, U on BNB Smart Chain) through vendor/x402multi, a port
+  // of the MCP's B402 lane. The studio runtime's own seller accepts one token by design, so it keeps its state
+  // (the /supported probe) and this module takes the route. X402_MULTI=0 hands the route back to the runtime seller.
+  const x402Cfg = asTable(asTable(cfg.payments)?.x402_seller) ?? {};
+  const multiSeller =
+    process.env.X402_MULTI !== "0" && seller.state !== "disabled"
+      ? (createRequire(import.meta.url)("../vendor/x402multi/seller.cjs") as {
+          createMultiSeller: (o: Record<string, unknown>) => { handle: (r: X402HttpRequest) => Promise<{ status: number; headers: Record<string, string>; body: string }>; state: string };
+        }).createMultiSeller({
+          env: process.env,
+          priceUsd: typeof x402Cfg.price_usd === "string" ? x402Cfg.price_usd : "0.5",
+          payTo: typeof x402Cfg.pay_to === "string" ? x402Cfg.pay_to : "",
+          resourceUrl: `${publicBaseUrl().replace(/\/$/, "")}${X402_SELL_PATH}`,
+          description: `${generatorTag()} pay per call: the same job spec the agent card documents, answered in the response`,
+          workTimeoutSeconds: typeof x402Cfg.work_timeout_seconds === "number" ? x402Cfg.work_timeout_seconds : 60,
+          dataDir: `${process.cwd()}/../../.studio/x402multi`,
+          runWork: (a: { prompt: string; payer?: string }) => runWork(a.prompt, { sessionId: "x402" }),
+        })
+      : null;
   const router = new SkillRouter(executor, { name: generatorTag() });
 
   const handler = new DefaultRequestHandler(
@@ -506,7 +527,7 @@ async function main(): Promise<void> {
               ? req.body
               : JSON.stringify(req.body ?? ""),
         };
-        const out = await seller.handle(request);
+        const out = multiSeller ? await multiSeller.handle(request) : await seller.handle(request);
         res.status(out.status).set(out.headers).send(out.body);
       },
     );
@@ -567,7 +588,7 @@ async function main(): Promise<void> {
   const servers = ports.map((p, i) => {
     const server = app.listen(p, host, () => {
       console.log(
-        `[seller-agent] serving on ${host}:${p}${i === 0 ? "" : " (secondary contract port)"} (x402: ${seller.state})`,
+        `[seller-agent] serving on ${host}:${p}${i === 0 ? "" : " (secondary contract port)"} (x402: ${multiSeller ? "multi " + multiSeller.state : seller.state})`,
       );
     });
     if (i > 0) {

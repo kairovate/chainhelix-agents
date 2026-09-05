@@ -189,7 +189,7 @@ export function clampPrice(proposedWei: bigint): bigint {
   // fix 2026-09-03 H27 H160: the ceiling was applied first and the floor last and
   // unconditionally, so an inverted range (min_price > max_price, one decimals slip
   // between two adjacent config lines) returned the FLOOR, a price ABOVE the configured
-  // ceiling, with no error at all. Measured on the old code with bounds (500, 200):
+  // ceiling, with no error. Measured on the old code with bounds (500, 200):
   // clampPrice(100) and clampPrice(1000) both returned 500. The right answer to an
   // inverted range is to refuse to sign, not to pick a side.
   // AGENT_PRICE_BOUNDS_STRICT=0 restores the old floor-wins behaviour.
