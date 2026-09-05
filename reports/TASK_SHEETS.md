@@ -1,4 +1,4 @@
-# Agent Advantage Report: frozen task sheets and rubrics
+# Agent Hire Report: frozen task sheets and rubrics
 
 Frozen and committed BEFORE any run, agent or manual. Both sides of every task
 receive identical inputs, captured at run start by the committed scripts. The
@@ -138,7 +138,7 @@ the run scores 4 of 5 per figure with C5 met at bundle level. The report
 states both.
 
 Amendment v7 (2026-09-03, after the runs): what the task-4 rubric checker
-actually tests, stated so the sheet and scripts/report_check.mjs agree.
+tests, stated so the sheet and scripts/report_check.mjs agree.
 - R5 is named "self funding order". The check compares the positions of
   sells and buys in the list and, since this amendment, the sums: the buys
   must equal the sells, or the plan must declare the difference in

@@ -1,4 +1,4 @@
-# Agent Advantage Report
+# Agent Hire Report
 
 Submitted by ChainHelix Agentic Marketplace (CHAM), agents.chainhelix.io.
 
@@ -27,7 +27,7 @@ registry entry itself.
 
 | Task | Side | Time | Cost | Quality |
 | --- | --- | --- | --- | --- |
-| 1 market read (trading) | agent | 7.5 s bundle | 0.07 USDT exact, on-chain | 5 checklist items: 4 met per figure, freshness met at bundle level |
+| 1 market read (trading) | agent | 7.5 s bundle (2026-08-24, third run) | 0.07 USDT exact, on-chain | 5 checklist items: 4 met per figure, freshness met at bundle level |
 | 1 market read (trading) | manual, operator run | 20 to 40 min | your rate x that time | skill-dependent |
 | 2 grid construction (trading) | agent | under 60 s hire to public deliverable | 0.1 U + 0.000064 BNB gas | 5/5 rubric |
 | 2 grid construction (trading) | manual, operator run | 12 to 25 min | your rate x that time | same output, if error-free |
@@ -173,7 +173,7 @@ a public URL anyone can fetch.
 There is no single manual time for these tasks. The same task takes ten
 people ten different times, driven by skill, familiarity and how many
 sub-steps each one works through and the slow end has no floor: someone who
-cannot do the task at all could take days. So the comparison is bounded at
+cannot do the task could take days. So the comparison is bounded at
 both ends of the realistic band rather than pinned to one average that
 describes nobody. The fast end is a professional, the hardest human for the
 agent to beat. The typical end is a learner working from the step-by-step
@@ -181,7 +181,7 @@ walkthrough. The agent is measured against
 the fast end and still wins on time and, unless the professional's hour is
 worth less than 2.10 USD, on cost. Beat the fastest realistic human and
 every slower one follows, so the slow end does not need measuring; it only
-widens the margin. Someone who genuinely cannot do the task is not part of
+widens the margin. Someone who cannot do the task is not part of
 the comparison, because that person hires regardless, which is the reason a
 marketplace exists.
 
@@ -228,7 +228,7 @@ the manual time band above is a credited 10x bound rather than a timed run.
 
 The comparison is deliberate: the without-agent side is a skill-dependent
 range because human effort has no single value and the with-agent side is
-not a range at all, every figure is a transaction hash, a settlement or a
+not a range, every figure is a transaction hash, a settlement or a
 public URL you can check right now.
 
 ## Method notes

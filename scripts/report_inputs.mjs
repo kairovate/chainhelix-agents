@@ -1,4 +1,4 @@
-// Captures the shared inputs for Advantage Report tasks 2 and 3 at run start.
+// Captures the shared inputs for Hire Report tasks 2 and 3 at run start.
 // Deterministic given the exchange responses; writes reports/inputs-<ts>.json
 // and prints it. Both the agent run and the manual run use the same file.
 import { writeFileSync } from "fs";
