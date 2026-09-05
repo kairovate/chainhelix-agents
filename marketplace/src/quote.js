@@ -3,7 +3,8 @@
 // briefly (well inside the quote's own validity window).
 import { randomUUID } from "crypto";
 import { createRequire } from "module";
-import { RPC_URL, TTL } from "./config.js";
+import { TTL } from "./config.js";
+import { viemTransports } from "./rpc.js"; // 2026-09-05: primary then fallback, see rpc.js
 import { cached } from "./cache.js";
 
 // fix 2026-09-02 H150: the storefront labelled every price "wallet-signed" and checked nothing; the check
@@ -15,7 +16,7 @@ const erc8183 = require("@bnbagent/sdk/erc8183");
 const viem = require("viem");
 const SIG_CHECK = process.env.QUOTE_SIG_CHECK !== "0";
 const COMMERCE = sdk.NETWORKS["bsc-mainnet"].commerceContract;
-const publicClient = viem.createPublicClient({ transport: viem.http(RPC_URL) });
+const publicClient = viem.createPublicClient({ transport: viemTransports(viem) }); // 2026-09-05: was pinned to RPC_URL alone
 export async function verifyDisplayQuote(envelope, wallet) {
   if (!SIG_CHECK) return { checked: false };
   try {
@@ -162,7 +163,7 @@ export async function displayQuote(agent) {
 // which sends terms only when HIRE_TERMS is set (scripts/hire.mjs L115), so the substitution is declared
 // instead: both quote routes and the hire plan return termsSource "caller" or "sample"
 // (server.js, fix 2026-09-02 H261) and the buyer script prints it. A caller that supplies both fields
-// never touches SAMPLE_SPECS at all.
+// never touches SAMPLE_SPECS.
 export async function liveQuote(agent, taskDescription, terms) {
   // fix 2026-09-03 H58: an unlisted category gave `sample.terms` on undefined, a bare TypeError that the
   // display path's catch hid and the passthrough path returned as a 502 with no reason. It is only reached

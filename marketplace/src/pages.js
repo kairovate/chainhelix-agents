@@ -112,7 +112,7 @@ ${footer()}
 
 function footer() {
   return `<footer>
-    <p><strong>For machines:</strong> everything on these pages is served as JSON at
+    <p><strong>The same data as JSON:</strong> every page is served at
       <a href="/api/agents">/api/agents</a>. Job status:
       <code>/api/jobs/&lt;id&gt;</code>. Quotes:
       <code>/api/agents/&lt;id&gt;/quote</code>.</p>
@@ -150,8 +150,10 @@ function fmtPrice(price) {
 }
 
 function statusBadge(status) {
-  const cls = status === "online" ? "on" : status === "offline" ? "off" : "unv";
-  const label = status === "online" ? "online" : status === "offline" ? "offline" : "unverified";
+  // fix 2026-09-05: `gated` (declared endpoint answers but requires authentication) is its own word,
+  // neither online nor offline; see docs/PROBE_SPEC.md section 3.
+  const cls = status === "online" ? "on" : status === "offline" ? "off" : status === "gated" ? "unv" : "unv";
+  const label = status === "online" ? "online" : status === "offline" ? "offline" : status === "gated" ? "gated" : "unverified";
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
@@ -222,12 +224,12 @@ function reachSummary(group) {
       ? ` <span class="muted">(showing ${group.agents.length} of ${group.totalMatched} matches)</span>`
       : "";
   const staleNote = group.stale
-    ? ` <span class="muted">(directory unreachable, showing the last known list)</span>`
+    ? ` <span class="muted">(directory unreachable, showing the last known list${group.asOf ? ", as of " + esc(new Date(group.asOf).toISOString().slice(0, 16).replace("T", " ")) + " UTC" : ""})</span>`
     : "";
   return `${reachNote}${capNote}${staleNote}`;
 }
 
-// One honest line of economic history. Counts cover every job ever created
+// One line of economic history. Counts cover every job ever created
 // on the commerce contract for this wallet; while the one-time registry
 // backfill is still running the line says so.
 function jobsLine(j) {
@@ -236,7 +238,12 @@ function jobsLine(j) {
     ? ` <span class="muted">(registry scan in progress: ${j.scannedJobs} of ${j.totalJobsOnChain} jobs checked)</span>`
     : "";
   if (!j.total) return `<span class="muted">none on record</span>${scanNote}`;
-  return `${j.completed} completed · ${j.inProgress} in progress · ${j.rejected} rejected, of ${j.total} total${scanNote}`;
+  // 2026-09-05 (operator: "3 of 4, where is the 4th?"): every state the contract knows is named, so the parts add up to the total
+  const parts = [`${j.completed} completed`, `${j.inProgress} in progress`];
+  if (j.open) parts.push(`${j.open} created and never funded`);
+  if (j.expired) parts.push(`${j.expired} expired`);
+  parts.push(`${j.rejected} rejected`);
+  return `${parts.join(" · ")}, of ${j.total} total${scanNote}`;
 }
 
 function sharedNote(a) {
@@ -247,10 +254,10 @@ function sharedNote(a) {
 
 function statusExplainer() {
   return `<p class="muted small">Discovered from the public ERC-8004 registry. Status comes from each
-      agent's own registration: online means its declared service endpoint answered just now,
-      offline means it declared one that didn't answer, unverified means its registration
-      declares no service endpoint at all. Listed so you can find them. Not run, checked,
-      or endorsed by this site.</p>`;
+      agent's own registration: online means its declared service endpoint answered on the newest probe,
+      offline means it declared one that didn't answer, gated means it declared one that answers
+      but requires authentication (so an anonymous check cannot tell), unverified means its registration
+      declares no service endpoint. This site lists and probes them. It does not operate them.</p>`;
 }
 
 // Category pages get the full picture: every registration in the lane as a
@@ -317,7 +324,7 @@ function traceSection(rows) {
     <p class="muted small">Each row is one hire read back from the chain: the escrow funding transaction, the
       on-chain submission with the deliverable the agent served, the permanent copy on BNB Greenfield with the
       sha256 of the served bytes, and the settlement transaction. Rows marked first-party test wallet were paid
-      from our own wallet. Machine view: <a href="/api/trace">/api/trace</a>.</p>
+      from our own wallet. As JSON: <a href="/api/trace">/api/trace</a>.</p>
     <table class="schema trace">
       <thead><tr><th>agent</th><th>hired</th><th>delivered</th><th>permanent copy</th><th>settled</th></tr></thead>
       <tbody>${tr}</tbody>
@@ -325,7 +332,45 @@ function traceSection(rows) {
   </section>`;
 }
 
-export function renderHome({ firstParty, discovered }, traceRows = []) {
+
+// 2026-09-05: pay-per-call purchases on record (src/paid_calls.js, marketplace/paid_calls.json). No rows, no section.
+function paidCallsSection(rows) {
+  if (!rows || !rows.length) return "";
+  const tr = rows.map((r) => `<tr>
+        <td><a href="/a/${esc(r.agent)}">${esc(r.agent)}</a></td>
+        <td>${esc(r.amount)} ${esc(r.asset)}</td>
+        <td><code>${esc(r.path)}</code></td>
+        <td><a href="${esc(r.link)}">${esc(short(r.tx))}</a>${r.at ? `<br><span class="muted small">${esc(r.at.slice(0, 16).replace("T", " "))}Z</span>` : ""}</td>
+      </tr>`).join("\n");
+  return `<section class="block">
+    <h2>Paid calls on record</h2>
+    <p class="muted small">Each row is one pay-per-call purchase over Binance's B402 rail: the agent, the asset paid, the path called and the
+      settlement transaction. Every agent takes USDT, USDC, USD1 or U at the same 0.5 as an escrow job; the deliverable
+      comes back in the same response. As JSON: <a href="/api/paid-calls">/api/paid-calls</a>.</p>
+    <table class="schema trace">
+      <thead><tr><th>agent</th><th>paid</th><th>path</th><th>settlement</th></tr></thead>
+      <tbody>${tr}</tbody>
+    </table>
+  </section>`;
+}
+// 2026-09-05: the partner tracks, the same three paragraphs the README carries.
+function partnerTracksSection() {
+  return `<section class="block">
+    <h2>Partner tracks</h2>
+    <p><strong>TermiX.</strong> 25,351 registrations on the TermiX platform, about 8 percent of the BNB Chain registry, declare an
+      endpoint with a literal {agentId} placeholder. Since 5 September the verified layer substitutes the registration's own
+      id before probing. 953 of them answer behind authentication and the rest do not answer. The defect was reported to
+      TermiX on 19 August as <a href="https://github.com/TermiX-official/bsc-mcp/issues/32">TermiX-official/bsc-mcp issue 32</a>.
+      The Agent Hire Report is the track deliverable: agents hiring agents, each hire with its receipts.</p>
+    <p><strong>AltLayer.</strong> 8004scan is the discovery and reputation source on every page. The verified layer indexed the
+      whole BNB Chain registry through its API.</p>
+    <p><strong>PancakeSwap.</strong> The health agent reports PancakeSwap v3 LP range health for a position given in the request.
+      The grid agent ladders a market such as WBNB/USDT around price walls given in the request. Both agents compute plans.
+      They read no position from PancakeSwap and execute nothing.</p>
+  </section>`;
+}
+
+export function renderHome({ firstParty, discovered }, traceRows = [], paidRows = []) {
   const byCat = Object.fromEntries(firstParty.map((a) => [a.category, a]));
   const discByCat = Object.fromEntries(discovered.map((d) => [d.category, d]));
   const shelves = Object.entries(CATEGORY_COPY)
@@ -346,10 +391,13 @@ export function renderHome({ firstParty, discovered }, traceRows = []) {
     <p class="tag">Hire on-chain agents for portfolio work. Agents are identified in the
     public ERC-8004 registry on BNB Smart Chain, prices are signed quotes fetched from
     each agent as this page loads and payment goes directly from your wallet to the
-    agent. This site never holds funds or keys.</p>
+    agent, per job in escrow or per call on Binance's B402 rail. Every agent publishes
+    exactly what a job must contain. This site never holds funds or keys.</p>
   </header>
   ${shelves}
-  ${traceSection(traceRows)}`
+  ${traceSection(traceRows)}
+  ${paidCallsSection(paidRows)}
+  ${partnerTracksSection()}`
   );
 }
 
@@ -363,8 +411,7 @@ export function renderCategory(cat, { firstParty, discovered }) {
     `<p class="crumb"><a href="/">Agent Market</a> / ${esc(copy.title)}</p>
   <header class="top">
     <h1>${esc(copy.title)}</h1>
-    <p class="tag">${esc(copy.blurb)} Prices are live signed quotes; payment goes directly
-    from your wallet to the agent.</p>
+    <p class="tag">${esc(copy.blurb)} Prices are live signed quotes; payment goes directly from your wallet to the agent, per job in escrow or per call on Binance's B402 rail.</p>
   </header>
   ${own ? firstPartyCard(own) : ""}
   <section class="block">
@@ -372,6 +419,28 @@ export function renderCategory(cat, { firstParty, discovered }) {
     ${group ? thirdPartyTable(group) : ""}
   </section>`
   );
+}
+
+// 2026-09-05 (build B2): what a third-party agent says it accepts, from its own card. Shown on every
+// third-party page: the skills it declares, whether each carries an example, and whether any machine-readable
+// input schema is published. Nearly every card on the registry declares nothing about the work; saying so
+// plainly is the point. First-party pages show the Job input table instead (schemaTable below).
+function acceptsBlock(d) {
+  if (d.listing !== "third-party") return "";
+  const a = d.accepts;
+  const head = `<section class="block"><h2>What it says it accepts</h2>`;
+  if (d.status !== "online") return `${head}<p class="muted small">Its card did not load (${esc(d.status)}), so nothing can be read about the work it accepts.</p></section>`;
+  if (!a || !a.declared) return `${head}<p class="muted small">Its card loaded and declares <strong>no skills</strong>: nothing a buyer could send is published. Read from the agent's own card when this page loaded.</p></section>`;
+  const rows = a.skills.map((s) => `<tr><td><code>${esc(s.id || "")}</code>${s.name && s.name !== s.id ? `<br><span class="muted small">${esc(s.name)}</span>` : ""}</td>
+      <td>${s.description ? esc(s.description) : `<span class="muted">no description</span>`}</td>
+      <td>${s.example ? `<code>${esc(s.example)}</code>` : `<span class="muted">none</span>`}</td></tr>`).join("\n");
+  return `${head}
+    <p class="muted small">${a.skills.length} skill${a.skills.length === 1 ? "" : "s"} declared, ${a.withExample} with an example, ${a.schemaDeclared ? "a machine-readable input schema is published" : "no machine-readable input schema"}. Read from the agent's own card when this page loaded; not checked or endorsed by this site.</p>
+    <div class="scroll"><table class="schema">
+      <tr><th>Skill</th><th>What it says</th><th>Example request</th></tr>
+      ${rows}
+    </table></div>
+  </section>`;
 }
 
 function schemaTable(schema) {
@@ -407,16 +476,16 @@ function hireBlock(d) {
     <pre class="cmd"># get a wallet-signed quote for the sample task
 curl https://agents.chainhelix.io/api/agents/${esc(d.id)}/quote
 
-# quote your own job spec (see the job input table above)
+# quote your own job input (the table above)
 curl -X POST https://agents.chainhelix.io/api/agents/${esc(d.id)}/quote \\
   -H 'Content-Type: application/json' \\
   -d '{"task_description":"{\\"goal\\":\\"...\\"}","terms":{"deliverables":"...","quality_standards":"..."}}'
 
 # after funding on-chain: watch the job and fetch the deliverable
 curl https://agents.chainhelix.io/api/jobs/&lt;job-id&gt;</pre>
-    <p class="muted small">A2A endpoint: <a href="${esc(d.hire.a2aEndpoint)}">${esc(
+    <p class="muted small">A2A endpoint: <code>${esc(
       d.hire.a2aEndpoint
-    )}</a> · <a href="${esc(d.hire.agentCard)}">agent card</a></p>
+    )}</code> (JSON-RPC, POST only) · <a href="${esc(d.hire.agentCard)}">agent card</a></p>
   </section>`;
 }
 
@@ -575,7 +644,7 @@ export function renderHire(d) {
   </header>
 
   <section class="block">
-    <h2>Job spec</h2>
+    <h2>Job input</h2>
     <p class="muted small">Edit the task before requesting a quote or use the sample as is.
     See the <a href="/a/${esc(d.id)}">job input reference</a>.</p>
     <textarea id="task" rows="6" style="width:100%;background:var(--panel);color:var(--text);
@@ -639,7 +708,9 @@ export function renderAgent(d) {
             ? " Its registration declares no service endpoint, so there is nothing to connect to."
             : d.status === "offline"
               ? " Its declared endpoint did not answer when this page loaded."
-              : ""
+              : d.status === "gated"
+                ? " Its declared endpoint answered but requires authentication, so this page cannot tell whether the agent works."
+                : ""
         }</p>`
       : "";
   return page(
@@ -695,6 +766,7 @@ export function renderAgent(d) {
       })</span></dd></div>
     <div><dt>Machine view</dt><dd><a href="/api/agents/${esc(d.id)}">this page as JSON</a></dd></div>
   </dl></div>
+  ${acceptsBlock(d)}
   ${schemaTable(d.inputSchema)}
   ${hireBlock(d)}`
   );

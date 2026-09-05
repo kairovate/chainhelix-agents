@@ -179,8 +179,14 @@ async function rpcOn(url, method, params) {
 // HIRE_RPC_FALLBACK_STRICT=0 restores the fall-back-on-any-throw behaviour.
 const RPC_FALLBACK_STRICT = (process.env.HIRE_RPC_FALLBACK_STRICT ?? "1") !== "0";
 const DETERMINISTIC_RPC_CODES = new Set([-32700, -32600, -32601, -32602]);
-function isDeterministicRpcError(e) {
+// 2026-09-05 (end-to-end hire, job 56716): publicnode now answers a fresh eth_getTransactionReceipt with code -32602
+// "Archive requests require a personal token", the very failure RPC_FALLBACK exists for, and H189/H257 above filed
+// -32602 under "deterministic", so the fallback never fired and /api/hire/jobid answered 502 on every hire. A node
+// refusing a read for want of a token is an availability answer whatever code it wears; it falls back.
+const AVAILABILITY_SHAPED = /archive request|personal token|rate limit|too many requests|quota|capacity/i;
+export function isDeterministicRpcError(e) {
   if (!e?.rpcApplicationError) return false;
+  if (AVAILABILITY_SHAPED.test(e.message)) return false;
   if (DETERMINISTIC_RPC_CODES.has(e.rpcErrorCode)) return true;
   return /execution reverted|invalid argument|invalid param/i.test(e.message);
 }

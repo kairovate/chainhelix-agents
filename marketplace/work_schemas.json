@@ -1,0 +1,332 @@
+{
+  "generated": "from strategies/schema.ts by strategies/emit_catalog_schema.ts; do not edit",
+  "agents": {
+    "rebalancer": {
+      "id": "rebalancer",
+      "category": "rebalancing",
+      "name": "Portfolio rebalancing plan",
+      "description": "Given current holdings, target weights and prices, returns current vs target weights, per-asset drift and the ordered trade list (sells before buys) that moves the portfolio to target, with the residual cash the plan does not net out. Deterministic arithmetic, no custody, no execution.",
+      "erc8004Id": 269223,
+      "endpoint": "https://agents.chainhelix.io/rebalancer/",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "rebalancing task_description",
+        "type": "object",
+        "properties": {
+          "holdings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "current position sizes in token units, one key per symbol (also accepted as: positions, balances, portfolio)"
+          },
+          "targets": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "desired weights, must sum to 1 (also accepted as: targetWeights, weights, allocation)"
+          },
+          "prices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "a mark for every symbol in holdings or targets (also accepted as: marks, quotes, pricesUsd)"
+          },
+          "driftThresholdPct": {
+            "type": "number",
+            "description": "no-trade band per asset, default 1"
+          },
+          "minTradeUsd": {
+            "type": "number",
+            "description": "dust filter on emitted trades, default 5"
+          }
+        },
+        "required": [
+          "holdings",
+          "targets",
+          "prices"
+        ],
+        "additionalProperties": true
+      },
+      "example": {
+        "holdings": {
+          "BTC": 1,
+          "ETH": 10
+        },
+        "targets": {
+          "BTC": 0.5,
+          "ETH": 0.5
+        },
+        "prices": {
+          "BTC": 60000,
+          "ETH": 2000
+        },
+        "driftThresholdPct": 1
+      }
+    },
+    "gridtrader": {
+      "id": "gridtrader",
+      "category": "grid",
+      "name": "Grid trading ladder",
+      "description": "Given a mark price and a budget, returns a symmetric buy/sell grid: buy levels below the price, sell levels above, equal USD size per level, and when strong price walls are supplied each level is annotated with its nearest wall and flagged if it sits on one. Deterministic arithmetic, no custody, no execution. Not a bounded-loss or profit-target strategy: fees, slippage, gas and PnL are not computed.",
+      "erc8004Id": 269224,
+      "endpoint": "https://agents.chainhelix.io/gridtrader/",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "grid task_description",
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number",
+            "description": "current mark price (also accepted as: mid, midPrice, mark, markPrice, currentPrice, spot)"
+          },
+          "budgetUsd": {
+            "type": "number",
+            "description": "total capital to ladder (also accepted as: capitalUsd, budget, capital, notionalUsd, sizeUsd)"
+          },
+          "levels": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "grid lines per side, default 5 (also accepted as: gridLevels, nLevels)"
+          },
+          "spanPct": {
+            "type": "number",
+            "description": "half-width of the grid in percent, below 100, default 5; or send lower and upper (absolute bounds) and the half-width is derived from the wider side (also accepted as: rangePct, widthPct)"
+          },
+          "lower": {
+            "type": "number",
+            "description": "grid lower bound in price; with upper, an alternative to spanPct"
+          },
+          "upper": {
+            "type": "number",
+            "description": "grid upper bound in price; with lower, an alternative to spanPct"
+          },
+          "walls": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "known support/resistance walls keyed by price, touches is an integer 1 to 10000; levels on a wall are flagged"
+          },
+          "wallBandPct": {
+            "type": "number",
+            "description": "distance in percent that counts as on a wall, default 0.7"
+          }
+        },
+        "required": [
+          "price",
+          "budgetUsd"
+        ],
+        "additionalProperties": true
+      },
+      "example": {
+        "price": 691.65,
+        "budgetUsd": 1000,
+        "levels": 5,
+        "spanPct": 2,
+        "walls": {
+          "677.8": 3,
+          "705.5": 2
+        }
+      }
+    },
+    "yieldopt": {
+      "id": "yieldopt",
+      "category": "yield",
+      "name": "Yield allocation across pools",
+      "description": "Given candidate pools with APY, optional TVL and risk score, and the capital to place, returns the allocation per pool under concentration and TVL-share caps, the blended APY and any capital left unallocated because a cap bound first. Deterministic arithmetic, no custody, no execution.",
+      "erc8004Id": 269226,
+      "endpoint": "https://agents.chainhelix.io/yieldopt/",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "yield task_description",
+        "type": "object",
+        "properties": {
+          "pools": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "apyPct": {
+                  "type": "number"
+                },
+                "tvlUsd": {
+                  "type": "number"
+                },
+                "riskScore": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "apyPct"
+              ]
+            },
+            "description": "candidate pools keyed by name; riskScore 1 (safest) to 5, default 3 (also accepted as: opportunities, vaults, farms)"
+          },
+          "capitalUsd": {
+            "type": "number",
+            "description": "capital to allocate (also accepted as: budgetUsd, capital, budget, amountUsd)"
+          },
+          "maxPerPoolPct": {
+            "type": "number",
+            "description": "max share of capital in one pool, at most 100, default 40"
+          },
+          "riskAversion": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "0 chases raw APY, 1 applies the full risk discount, default 0.5"
+          },
+          "tvlCapPct": {
+            "type": "number",
+            "description": "max share of a pool's TVL to hold, default 5"
+          }
+        },
+        "required": [
+          "pools",
+          "capitalUsd"
+        ],
+        "additionalProperties": true
+      },
+      "example": {
+        "pools": {
+          "pcs-wbnb-usdt": {
+            "apyPct": 12.5,
+            "tvlUsd": 50000000,
+            "riskScore": 2
+          },
+          "venus-usdt": {
+            "apyPct": 6.1,
+            "tvlUsd": 200000000,
+            "riskScore": 1
+          },
+          "new-farm": {
+            "apyPct": 80,
+            "tvlUsd": 400000,
+            "riskScore": 5
+          }
+        },
+        "capitalUsd": 10000,
+        "maxPerPoolPct": 40
+      }
+    },
+    "healthmon": {
+      "id": "healthmon",
+      "category": "health",
+      "name": "Position health report",
+      "description": "Lending health: given collateral rows with liquidation thresholds, debt and prices, returns the health factor, its status (healthy, warning, critical, liquidatable) and per-asset liquidation prices with drop distances. LP range health: send `position` {price, lowerPrice, upperPrice} instead of collateral and debt. One question per job. Deterministic arithmetic, no custody, no execution.",
+      "erc8004Id": 269228,
+      "endpoint": "https://agents.chainhelix.io/healthmon/",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "health task_description",
+        "description": "One question per job: lending health (collateral, debt, prices) or LP range health (position).",
+        "type": "object",
+        "properties": {
+          "collateral": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "type": "number"
+                },
+                "liqThreshold": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "amount",
+                "liqThreshold"
+              ]
+            },
+            "description": "liqThreshold in (0, 1]; required unless `position` is sent (also accepted as: collaterals, supplied, deposits)"
+          },
+          "debt": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "outstanding debt per symbol; required unless `position` is sent (also accepted as: debts, borrowed, borrows, loans)"
+          },
+          "prices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "a mark for every collateral and debt symbol (also accepted as: marks, quotes, pricesUsd)"
+          },
+          "alertHF": {
+            "type": "number",
+            "description": "warning level, default 1.5"
+          },
+          "criticalHF": {
+            "type": "number",
+            "description": "critical level, must be below alertHF, default 1.1"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "price": {
+                "type": "number"
+              },
+              "lowerPrice": {
+                "type": "number"
+              },
+              "upperPrice": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "price",
+              "lowerPrice",
+              "upperPrice"
+            ],
+            "description": "PancakeSwap v3 LP range health instead of lending health (do not send with collateral or debt); optional nearEdgePct, feesEarnedUsd, positionValueUsd, ageDays; returns range status, distance to each edge, position inside the band and the fee run-rate (also accepted as: lpPosition, range)"
+          },
+          "walls": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "with position only: strong levels keyed by price, each range edge is annotated with the nearest one"
+          }
+        },
+        "required": [],
+        "anyOf": [
+          {
+            "required": [
+              "collateral",
+              "debt",
+              "prices"
+            ]
+          },
+          {
+            "required": [
+              "position"
+            ]
+          }
+        ],
+        "additionalProperties": true
+      },
+      "example": {
+        "collateral": {
+          "ETH": {
+            "amount": 10,
+            "liqThreshold": 0.8
+          }
+        },
+        "debt": {
+          "USDT": 10000
+        },
+        "prices": {
+          "ETH": 2000,
+          "USDT": 1
+        }
+      }
+    }
+  }
+}

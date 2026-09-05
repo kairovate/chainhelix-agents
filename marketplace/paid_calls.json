@@ -1,0 +1,69 @@
+{
+  "generated": "2026-09-05T20:40:00Z",
+  "note": "one row per pay-per-call purchase on record: the agent, the asset paid, the path called and the settlement transaction on BNB Smart Chain; 0.5 each to the agents' payout wallet; the deliverable came back in the same response; times are the block times of the settlement transactions",
+  "calls": [
+    {
+      "agent": "gridtrader",
+      "asset": "U",
+      "path": "/gridtrader/x402",
+      "amount": "0.5",
+      "tx": "0x4e29f4200a12c399aa944a2fc33172652ac28a0174239aa956c12828d3a68f32",
+      "at": "2026-09-05T07:58:24Z",
+      "block": 120074601
+    },
+    {
+      "agent": "healthmon",
+      "asset": "U",
+      "path": "/healthmon/x402",
+      "amount": "0.5",
+      "tx": "0xa5add9a72e1b70197b330e05a46b54bf80a5f017d8d3213ae3ab1d437a6b7a5f",
+      "at": "2026-09-05T08:06:01Z",
+      "block": 120075616
+    },
+    {
+      "agent": "healthmon",
+      "asset": "U",
+      "path": "/healthmon/x402",
+      "amount": "0.5",
+      "tx": "0xd86438a3867b518945cd62af45d36b8fb214d8d6df82abf4a4948a686ab80c7f",
+      "at": "2026-09-05T19:36:00Z",
+      "block": 120167583
+    },
+    {
+      "agent": "gridtrader",
+      "asset": "USDT",
+      "path": "/gridtrader/x402",
+      "amount": "0.5",
+      "tx": "0xb904e166c9b61fb1f8cbeece0d9466e2a42a07ea3c4e1468bc46d8522d462692",
+      "at": "2026-09-05T19:37:29Z",
+      "block": 120167780
+    },
+    {
+      "agent": "yieldopt",
+      "asset": "USDC",
+      "path": "/yieldopt/x402",
+      "amount": "0.5",
+      "tx": "0xba0a010dd65daa8a51cb672c4650cf5ab5b602ddf88754934fa01ba96fcbb2aa",
+      "at": "2026-09-05T19:58:15Z",
+      "block": 120170549
+    },
+    {
+      "agent": "rebalancer",
+      "asset": "USD1",
+      "path": "/rebalancer/x402",
+      "amount": "0.5",
+      "tx": "0x1bc89c722d5745a92883289dc4753e0c13b8e2106b3a528ee1d6bdaacccf19f1",
+      "at": "2026-09-05T19:58:41Z",
+      "block": 120170606
+    },
+    {
+      "agent": "healthmon",
+      "asset": "USDC",
+      "path": "/healthmon/x402",
+      "amount": "0.5",
+      "tx": "0x5dd8506b28529ce592c53a56e55460ff64f828cb87d07a2f87d33b321625e96d",
+      "at": "2026-09-05T20:26:02Z",
+      "block": 120174252
+    }
+  ]
+}

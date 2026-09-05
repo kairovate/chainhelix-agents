@@ -3,8 +3,26 @@
 export const PORT = Number(process.env.MARKETPLACE_PORT || 9110);
 export const HOST = process.env.MARKETPLACE_HOST || "127.0.0.1";
 export const RPC_URL = process.env.RPC_URL || "https://bsc-rpc.publicnode.com";
-export const SCAN_API = process.env.SCAN_API || "https://www.8004scan.io/api/v1";
-export const SCAN_SITE = "https://www.8004scan.io";
+// 2026-09-05: the directory now serves from its apex host and answers the www host with a 308 to it.
+export const SCAN_API = process.env.SCAN_API || "https://8004scan.io/api/v1";
+export const SCAN_SITE = "https://8004scan.io";
+// 2026-09-05: the directory's agent pages moved from /agents/<chainId>:<registry>:<id> (now 404) to
+// /agents/<chain slug>/<id>; "bsc" is the slug it uses for BNB Smart Chain.
+export const SCAN_CHAIN_SLUG = "bsc";
+// 2026-09-05: the 8004scan Pro tier key, from the unit environment only (SCAN_API_KEY; header name SCAN_API_KEY_HEADER,
+// default x-api-key). The header goes ONLY to the directory's own host family, never to an agent endpoint or a gateway.
+export const SCAN_API_KEY = process.env.SCAN_API_KEY || "";
+export const SCAN_API_KEY_HEADER = process.env.SCAN_API_KEY_HEADER || "x-api-key";
+function hostFamily(h) { return String(h || "").toLowerCase().replace(/^www\./, ""); }
+export function scanHeaders(url) {
+  const h = { Accept: "application/json" };
+  const key = process.env.SCAN_API_KEY || SCAN_API_KEY; // read at call time: a key set after boot is used without a restart
+  if (!key) return h;
+  const name = process.env.SCAN_API_KEY_HEADER || SCAN_API_KEY_HEADER;
+  try { if (hostFamily(new URL(url).hostname) === hostFamily(new URL(SCAN_API).hostname)) h[name] = key; } catch { /* not a url */ }
+  return h;
+}
+export function scanAgentUrl(erc8004Id) { return `${SCAN_SITE}/agents/${SCAN_CHAIN_SLUG}/${Number(erc8004Id)}`; }
 export const BSCSCAN = "https://bscscan.com";
 export const NETWORK = "bsc-mainnet";
 export const CHAIN_ID = 56;
