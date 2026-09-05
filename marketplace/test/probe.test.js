@@ -113,9 +113,49 @@ test("probeAllowed is name-based: the audited shapes pass the string guard", () 
 
 // fix 2026-09-03 H192: the per-hop resolver guard, exercised end to end without a network. localhost and
 // ip6-localhost resolve from the OS hosts file (nsswitch reads files before dns), so this needs no network
-// and is deterministic. A not-a-url case covers the throw path without touching the resolver at all.
+// and is deterministic. A not-a-url case covers the throw path without touching the resolver.
 test("resolvePublic refuses a name that resolves to a private address", async () => {
   assert.equal(await resolvePublic("https://localhost/"), null);
   assert.equal(await resolvePublic("https://ip6-localhost/"), null);
   assert.equal(await resolvePublic("not a url"), null);
+});
+
+// fix 2026-09-05 (brief part 4): endpoint templates and the gated class.
+import { resolveEndpointTemplate, cardFailureStatus, RESOLVE_TEMPLATES } from "../src/probe.js";
+
+test("resolveEndpointTemplate substitutes the registry id and keeps the raw form", () => {
+  const r = resolveEndpointTemplate("https://platform-backend.prod.termix.live/api/v1/a2a/agents/{agentId}", 293111);
+  assert.equal(r.url, "https://platform-backend.prod.termix.live/api/v1/a2a/agents/293111");
+  assert.equal(r.raw, "https://platform-backend.prod.termix.live/api/v1/a2a/agents/{agentId}");
+  assert.deepEqual(resolveEndpointTemplate("https://example.com/agents/{ id }/card", 7), { url: "https://example.com/agents/7/card", raw: "https://example.com/agents/{ id }/card" });
+  assert.deepEqual(resolveEndpointTemplate("https://example.com/a/{tokenId}", 7), { url: "https://example.com/a/7", raw: "https://example.com/a/{tokenId}" });
+  assert.deepEqual(resolveEndpointTemplate("https://example.com/a/{other}", 7), { url: "https://example.com/a/{other}", raw: null });
+  assert.deepEqual(resolveEndpointTemplate("https://example.com/plain/", 7), { url: "https://example.com/plain/", raw: null });
+  assert.deepEqual(resolveEndpointTemplate(null, 7), { url: null, raw: null });
+});
+
+test("cardFailureStatus: 401 and 403 are gated only when templates are enabled, everything else offline", () => {
+  const gated = RESOLVE_TEMPLATES ? "gated" : "offline";
+  assert.equal(cardFailureStatus(new Error("401")), gated);
+  assert.equal(cardFailureStatus(new Error("403")), gated);
+  assert.equal(cardFailureStatus(new Error("HTTP 401")), gated);
+  assert.equal(cardFailureStatus(new Error("404")), "offline");
+  assert.equal(cardFailureStatus(new Error("500")), "offline");
+  assert.equal(cardFailureStatus(new Error("host resolves to disallowed address")), "offline");
+  assert.equal(cardFailureStatus(new Error("The operation was aborted")), "offline");
+});
+
+// 2026-09-05 (build B2): what a card says it accepts.
+import { summarizeAccepts } from "../src/probe.js";
+test("summarizeAccepts reads skills, examples and a declared schema, bounded", () => {
+  const ours = { skills: [{ id: "grid", name: "Grid trading ladder", description: "x".repeat(500), examples: ['{"price":1}'] }, { id: "negotiate", description: "n" }],
+    capabilities: { extensions: [{ uri: "u", params: { grid: { type: "object", properties: { price: {} } } } }] } };
+  const a = summarizeAccepts(ours);
+  assert.equal(a.declared, true); assert.equal(a.skills.length, 2); assert.equal(a.withExample, 1); assert.equal(a.schemaDeclared, true);
+  assert.equal(a.skills[0].description.length, 300); assert.equal(a.skills[0].example, '{"price":1}'); assert.equal(a.skills[1].example, null);
+  const bare = summarizeAccepts({ name: "x", skills: [] });
+  assert.equal(bare.declared, false); assert.equal(bare.schemaDeclared, false);
+  assert.equal(summarizeAccepts(null), null);
+  const many = summarizeAccepts({ skills: Array.from({ length: 30 }, (_, i) => ({ id: "s" + i })) });
+  assert.equal(many.skills.length, 12);
 });

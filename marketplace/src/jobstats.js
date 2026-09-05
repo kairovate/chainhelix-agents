@@ -157,6 +157,8 @@ export function jobStatsFor(providerWallet) {
     completed: p?.completed ?? 0,
     rejected: p?.rejected ?? 0,
     inProgress: (p?.funded ?? 0) + (p?.submitted ?? 0),
+    open: p?.open ?? 0, // 2026-09-05: created, never funded
+    expired: p?.expired ?? 0,
     ...(p?.unknown ? { unknownStatus: p.unknown } : {}), // fix 2026-09-03 H195 H252: a gap shows as a gap
     scope: "all jobs ever created on the commerce contract",
     scannedJobs: state.lastJobId,

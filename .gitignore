@@ -19,3 +19,6 @@ pnpm-lock.yaml
 # fix 2026-09-02 H81: run output and in-place backups of live sources never ship (72 MB of loop output and two stale verify.js copies were unignored)
 *.out
 marketplace/src/*.pre_*
+
+# fix 2026-09-05: per-file backups taken before an audit edit, never committed
+*.pre_*

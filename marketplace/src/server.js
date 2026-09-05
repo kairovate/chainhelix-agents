@@ -1,8 +1,9 @@
 import { readFileSync, statSync } from "fs";
 // Marketplace data core, the single source every surface reads from.
 // Surface 1 of 3 (JSON API); the web pages and MCP server consume the same
-// functions. No keys, no custody, no signing. One write path: the on-demand verify (/api/verify/:id)
-// records its probe under data/ (fix 2026-09-02 H235: the old line said "no writes", which the verify route contradicted).
+// functions. No keys, no custody, no signing, no writes: since fix 2026-09-05 (H235 option A) GET /api/verify/:id
+// answers from the newest sweep record in the state and writes nothing; the sweeps (verify_live.sh, verify_loop.sh)
+// are the only writers. VERIFY_ON_DEMAND=1 restores the old behaviour (probe now, spool the record under data/).
 import Fastify from "fastify";
 import { PORT, HOST, CATEGORIES, CHAIN_ID, RATE_LIMIT } from "./config.js";
 import { CATALOG, listAgents, agentDetail, findFirstParty } from "./catalog.js";
@@ -19,8 +20,9 @@ import {
 } from "./hire.js";
 import { renderHome, renderCategory, renderAgent, renderHire, HIRE_SCRIPT, CATEGORY_COPY } from "./pages.js";
 import { startJobStats } from "./jobstats.js";
-import { verifyNow, liveMap } from "./verify.js"; // 2026-08-24 ChainHelix Verified live layer
+import { verifyNow, liveMap, recordFromState } from "./verify.js"; // 2026-08-24 ChainHelix Verified live layer
 import { traceView, traceRows, loadTrace } from "./trace.js"; // 2026-09-03 settled hires, end to end (read-only)
+import { paidCallsView, paidCallRows, loadPaidCalls } from "./paid_calls.js"; // 2026-09-05 pay-per-call purchases on record (read-only)
 
 startJobStats();
 
@@ -56,7 +58,7 @@ function sendPage(reply, html) {
 }
 
 app.get("/", async (req, reply) => {
-  sendPage(reply, renderHome(await listAgents(), traceRows(loadTrace())));
+  sendPage(reply, renderHome(await listAgents(), traceRows(loadTrace()), paidCallRows(loadPaidCalls())));
 });
 
 app.get("/c/:cat", async (req, reply) => {
@@ -148,12 +150,47 @@ const JOB_ID_RE = /^\d{1,12}$/;
 // signed a job they never asked for. The plan now requires the caller's task; HIRE_PLAN_REQUIRE_TASK=0 restores
 // the fallback. The quote route keeps the sample (for display) and says so in taskSource.
 const PLAN_REQUIRE_TASK = process.env.HIRE_PLAN_REQUIRE_TASK !== "0";
+// fix 2026-09-05 (brief section 8b): the plan is what the buyer signs and funds. Until now a task_description
+// missing a required parameter was quoted, funded and then refused by the agent, and the escrow paid for the
+// refusal (jobs 56652-56655, 56680). The agent's own Job input table (catalog.json, generated from
+// strategies/schema.ts, the same source the agent card and the refusal use) is checked HERE, before any quote,
+// and the buyer gets the missing names and the example back with a 400. HIRE_PLAN_SCHEMA_CHECK=0 disables it.
+const PLAN_SCHEMA_CHECK = process.env.HIRE_PLAN_SCHEMA_CHECK !== "0";
+function specFromTask(task) {
+  if (typeof task !== "string") return null;
+  const a = task.indexOf("{"), b = task.lastIndexOf("}");
+  if (a !== -1 && b > a) {
+    try { const o = JSON.parse(task.slice(a, b + 1)); if (o && typeof o === "object" && !Array.isArray(o)) return o; } catch { /* fall through to key=value */ }
+  }
+  // 2026-09-05: the key=value carrier (`k=v; k=v`, the same one strategies/parseJob.ts accepts) is a spec too
+  const kv = {};
+  for (const part of task.split(/[;\n]/)) { const m = /^\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*(.*?)\s*$/.exec(part); if (m) kv[m[1]] = /^-?\d+(\.\d+)?$/.test(m[2]) ? Number(m[2]) : m[2]; }
+  return Object.keys(kv).length ? kv : null;
+}
+export function checkTaskAgainstSchema(agent, task) {
+  const schema = agent && agent.inputSchema;
+  if (!schema || !schema.required) return { ok: true, skipped: true };
+  const spec = specFromTask(task);
+  if (!spec) return { ok: false, error: "task_description must carry the job spec as a JSON object (or key=value pairs); see the agent's Job input table and example", expected: schema };
+  let required = Object.keys(schema.required);
+  const aliases = schema.aliases || {};
+  const present = (k) => (v => v !== undefined && v !== null && v !== "")(spec[k]) || (aliases[k] || []).some((a) => spec[a] !== undefined && spec[a] !== null && spec[a] !== ""); // 2026-09-05: declared aliases count
+  if (agent.category === "health" && (spec.position !== undefined || (aliases.position || []).some((a) => spec[a] !== undefined))) required = []; // LP range health: position instead of collateral/debt/prices
+  if (agent.category === "grid" && spec.spanPct === undefined && spec.lower !== undefined && spec.upper !== undefined) { /* lower/upper is the declared alternative to spanPct; optional anyway */ }
+  const missing = required.filter((k) => !present(k));
+  if (missing.length) return { ok: false, error: `task_description is missing required parameter(s): ${missing.join(", ")}; the agent would refuse this job`, missing, expected: schema };
+  return { ok: true };
+}
 app.post("/api/agents/:id/hire/plan", async (req, reply) => {
   const agent = findFirstParty(req.params.id);
   if (!agent) return reply.code(404).send({ error: "hiring is only wired for first-party agents" });
   const body = req.body ?? {};
   if (PLAN_REQUIRE_TASK && !(typeof body.task_description === "string" && body.task_description.trim())) {
     return reply.code(400).send({ error: "task_description required: the plan encodes it into the job you sign; GET /api/agents/:id/quote shows the agent's sample task" });
+  }
+  if (PLAN_SCHEMA_CHECK) {
+    const v = checkTaskAgainstSchema(agent, body.task_description);
+    if (!v.ok) return reply.code(400).send({ error: v.error, ...(v.missing ? { missing: v.missing } : {}), expected: v.expected });
   }
   try {
     const envelope = await liveQuote(agent, body.task_description, body.terms);
@@ -167,6 +204,7 @@ app.post("/api/agents/:id/hire/plan", async (req, reply) => {
       envelope,
       taskSource: body.task_description ? "caller" : "sample", // fix 2026-09-02 H261
       termsSource: body.terms ? "caller" : "sample",
+      schemaCheck: PLAN_SCHEMA_CHECK ? "passed" : "off", // fix 2026-09-05
       jobLifetimeSeconds: await jobLifetimeSeconds(),
       ...plan,
       next: "send tx from your wallet, then GET /api/hire/jobid?tx=<hash>",
@@ -257,10 +295,18 @@ function greenfieldCopy(jobId) {
 // /api/verified: the live map, alive and hireable agents only, each with ageSeconds; version = newest probe.
 // Each entry also carries rung (verified / hireable / alive) and the map carries rungs, the legend (fix 2026-09-02 H73).
 app.get("/api/verified", async () => liveMap());
-// /api/verify/:id: probe this agent NOW and answer as of this second, with its probe history.
+// /api/verify/:id: the newest sweep record for this agent with its probe history (fix 2026-09-05 H235 option A:
+// an unauthenticated GET no longer probes or writes; refresh happens on the sweeps, whose cadence is published in
+// docs/PROBE_SPEC.md section 5). VERIFY_ON_DEMAND=1: probe now and answer as of this second, as before.
+const ON_DEMAND = process.env.VERIFY_ON_DEMAND === "1";
 app.get("/api/verify/:id", async (req, reply) => {
   const id = req.params.id;
   if (!/^\d{1,12}$/.test(id)) return reply.code(400).send({ error: "numeric ERC-8004 id required" });
+  if (!ON_DEMAND) {
+    const r = recordFromState(Number(id));
+    if (!r) return reply.code(404).send({ error: "not probed yet; the sweeps reach every registration on their own cadence (docs/PROBE_SPEC.md section 5)" });
+    return { id: r.id, status: r.status, reason: r.reason ?? null, endpoint: r.endpoint ?? null, ...(r.rawEndpoint ? { rawEndpoint: r.rawEndpoint } : {}), card: r.card ?? null, probedAt: r.probedAt, ageSeconds: Math.round((Date.now() - r.probedAt) / 1000), ms: r.ms ?? null, history: r.history ?? [], source: "sweep" };
+  }
   try {
     const r = await verifyNow(Number(id));
     if (r.unregistered) return reply.code(404).send({ error: "no such agent on-chain" }); // fix 2026-09-02: an id with no registration is not recorded
@@ -273,6 +319,7 @@ app.get("/api/verify/:id", async (req, reply) => {
 // 2026-09-03: settled hires with all four facts on record (funding tx, on-chain submission + served deliverable,
 // Greenfield copy, settlement tx). Read from data/job_trace.json, written only by scripts/build_job_trace.mjs.
 app.get("/api/trace", async () => traceView());
+app.get("/api/paid-calls", async () => paidCallsView()); // 2026-09-05
 app.get("/api/jobs/:id", async (req, reply) => {
   const id = req.params.id;
   if (!/^\d{1,12}$/.test(id)) return reply.code(400).send({ error: "numeric job id required" });

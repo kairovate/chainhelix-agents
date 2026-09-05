@@ -6,7 +6,8 @@
 import { lookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
-import { RPC_URL, TTL } from "./config.js";
+import { TTL } from "./config.js";
+import { rpcRead } from "./rpc.js"; // 2026-09-05
 import { CATALOG } from "./catalog.js";
 import { cached } from "./cache.js";
 
@@ -186,6 +187,27 @@ export function extractEndpoint(meta) {
   return (a2a && (a2a.endpoint || a2a.url)) || candidates[0] || null;
 }
 
+// fix 2026-09-05 (brief part 4): 25,296 registrations (8.3 percent of the index, 25,272 of them on one
+// platform) declare an endpoint carrying an unsubstituted template such as
+// https://host/api/v1/a2a/agents/{agentId}. The probe fetched the braces literally, got nothing, and the
+// registration was counted offline over a URL we never resolved. The registry id IS the value the template
+// wants; substitute it before probing and keep the raw form beside it. Off unless VERIFY_RESOLVE_TEMPLATES=1
+// so the running loops do not change behaviour before the operator's restart window.
+export const RESOLVE_TEMPLATES = process.env.VERIFY_RESOLVE_TEMPLATES === "1";
+const TEMPLATE_KEYS = /\{\s*(agent_?id|id|token_?id|agentid)\s*\}/gi;
+export function resolveEndpointTemplate(endpoint, id) {
+  if (typeof endpoint !== "string" || id === undefined || id === null) return { url: endpoint, raw: null };
+  const url = endpoint.replace(TEMPLATE_KEYS, String(id));
+  return url === endpoint ? { url: endpoint, raw: null } : { url, raw: endpoint };
+}
+// fix 2026-09-05 (brief part 4): an endpoint that resolves and answers 401 or 403 exists and is running
+// behind authentication; an anonymous probe cannot tell whether the agent works. That is neither alive
+// nor offline. Status word `gated`, defined in docs/PROBE_SPEC.md. Off unless VERIFY_RESOLVE_TEMPLATES=1.
+export function cardFailureStatus(err) {
+  const m = /^(?:HTTP )?(401|403)$/.exec(String(err && err.message ? err.message : err).trim());
+  return RESOLVE_TEMPLATES && m ? "gated" : "offline";
+}
+
 // The declared endpoint may be the card itself or a base URL.
 export function cardUrl(endpoint) {
   if (/agent-card\.json$/.test(endpoint)) return endpoint;
@@ -223,19 +245,9 @@ async function tokenUri(erc8004Id) {
   const t = setTimeout(() => ctrl.abort(), 10_000);
   let body;
   try {
-    const res = await fetch(RPC_URL, {
-      signal: ctrl.signal,
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_call",
-        params: [{ to: CATALOG.registry, data }, "latest"],
-      }),
-    });
-    if (RPC_STRICT && !res.ok) throw new Error(`rpc HTTP ${res.status}`); // fix 2026-09-03 H60
-    body = RPC_STRICT ? JSON.parse(await readCapped(res, ctrl)) : await res.json(); // fix 2026-09-03 H60 H125
+    // 2026-09-05: read through rpc.js (primary, then the fallback on an availability-shaped failure). rpc.js
+    // refuses a non-2xx and caps the body the way fix 2026-09-03 H60 H125 did here.
+    body = { result: await rpcRead("eth_call", [{ to: CATALOG.registry, data }, "latest"], { signal: ctrl.signal, maxBytes: MAX_BODY_BYTES }) };
   } finally {
     clearTimeout(t);
   }
@@ -273,17 +285,41 @@ async function declaredEndpoint(erc8004Id) {
 //   online      declared endpoint served a valid agent card just now
 //   offline     an endpoint is declared on-chain but did not answer
 //   unverified  the registration declares no reachable service endpoint
+//   gated       the declared endpoint answers, but requires authentication (401/403); not determinable
+//               by an anonymous probe (fix 2026-09-05, VERIFY_RESOLVE_TEMPLATES=1)
+// 2026-09-05 (build B2): what the agent says it ACCEPTS, read from its own card. The finding behind it: cards on
+// this network describe how to pay and say nothing about the work; a buyer cannot tell what to send. Each skill:
+// id, name, a bounded description, whether it carries an example and the first one, input modes; plus whether the
+// card declares any machine-readable input schema (an A2A extension carrying inputSchema, the shape our own cards
+// use). `declared: false` with a loaded card means the agent publishes nothing a buyer could act on. Bounded:
+// 12 skills, 300 chars per text field, every string escaped by the page renderer.
+export function summarizeAccepts(card) {
+  if (!card || typeof card !== "object") return null;
+  const cut = (v, n) => (typeof v === "string" ? v.slice(0, n) : null);
+  const skills = (Array.isArray(card.skills) ? card.skills : []).slice(0, 12).map((s) => ({
+    id: cut(s && (s.id || s.name), 80), name: cut(s && s.name, 120), description: cut(s && s.description, 300),
+    example: Array.isArray(s && s.examples) && s.examples.length ? cut(String(s.examples[0]), 300) : null,
+    examples: Array.isArray(s && s.examples) ? s.examples.length : 0,
+    inputModes: Array.isArray(s && s.inputModes) ? s.inputModes.slice(0, 4).map((m) => cut(String(m), 40)) : [],
+  }));
+  const ext = card.capabilities && Array.isArray(card.capabilities.extensions) ? card.capabilities.extensions : [];
+  const schemaDeclared = ext.some((e) => e && e.params && typeof e.params === "object" && Object.values(e.params).some((v) => v && typeof v === "object" && (v.properties || v.type === "object")));
+  return { declared: skills.length > 0, skills, withExample: skills.filter((s) => s.examples > 0).length, schemaDeclared };
+}
 export async function probeThirdParty(erc8004Id) {
-  const endpoint = await declaredEndpoint(erc8004Id);
-  if (!endpoint || !probeAllowed(endpoint)) return { status: "unverified", endpoint: null };
+  const declared = await declaredEndpoint(erc8004Id);
+  const endpoint = RESOLVE_TEMPLATES ? resolveEndpointTemplate(declared, erc8004Id).url : declared;
+  if (!endpoint || !probeAllowed(endpoint)) return { status: "unverified", endpoint: null, accepts: null };
   const url = cardUrl(endpoint);
-  const status = await cached(`tp:health:${erc8004Id}`, TTL.tpHealth, async () => {
+  const r = await cached(`tp:health:${erc8004Id}`, TTL.tpHealth, async () => {
     try {
       const card = await fetchJson(url, 3_000);
-      return card && typeof card === "object" ? "online" : "offline";
-    } catch {
-      return "offline";
+      return card && typeof card === "object" ? { status: "online", accepts: summarizeAccepts(card) } : { status: "offline", accepts: null };
+    } catch (e) {
+      return { status: cardFailureStatus(e), accepts: null };
     }
-  }).catch(() => "offline");
-  return { status, endpoint: url };
+  }).catch(() => ({ status: "offline", accepts: null }));
+  // an older cache entry may still be the bare status string (same TTL window as the deploy)
+  const status = typeof r === "string" ? r : r.status;
+  return { status, endpoint: url, accepts: typeof r === "string" ? null : r.accepts };
 }

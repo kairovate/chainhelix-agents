@@ -4,7 +4,7 @@
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { CATEGORIES, DISCOVERY, SCAN_SITE, BSCSCAN, TTL } from "./config.js";
+import { CATEGORIES, DISCOVERY, BSCSCAN, TTL, scanAgentUrl } from "./config.js";
 import { cached } from "./cache.js";
 import { scanAgent, discoverCategory } from "./scan.js";
 import { displayQuote } from "./quote.js";
@@ -18,7 +18,7 @@ const OUR_IDS = new Set(CATALOG.agents.map((a) => a.erc8004Id));
 
 function identityLinks(erc8004Id, wallet) {
   return {
-    scan: `${SCAN_SITE}/agents/${CATALOG.chainId}:${CATALOG.registry.toLowerCase()}:${erc8004Id}`,
+    scan: scanAgentUrl(erc8004Id), // 2026-09-05: the directory's page scheme changed, see config.js
     walletOnBscscan: `${BSCSCAN}/address/${wallet}`,
     registryOnBscscan: `${BSCSCAN}/address/${CATALOG.registry}`,
   };
@@ -112,7 +112,8 @@ function tpRemember(id, v) {
 
 // Liveness is probed from the agent's OWN on-chain registration: tokenURI →
 // declared service endpoint → agent card fetch. No endpoint declared =
-// "unverified"; declared but dead = "offline". Shown either way, never hidden.
+// "unverified"; declared but dead = "offline"; declared, answers, needs auth = "gated"
+// (fix 2026-09-05). Shown either way, never hidden.
 async function thirdPartyEntry(category, rec) {
   tpRemember(rec.erc8004Id, { category, rec }); // fix 2026-09-02 H239
   const probe = await probeThirdParty(rec.erc8004Id);
@@ -124,6 +125,7 @@ async function thirdPartyEntry(category, rec) {
     oneLiner: rec.description,
     status: probe.status,
     endpoint: probe.endpoint,
+    accepts: probe.accepts ?? null, // 2026-09-05 (B2): what the agent's own card says it accepts
     wallet: rec.owner,
     identity: {
       erc8004Id: rec.erc8004Id,
@@ -166,7 +168,7 @@ export async function listAgents() {
       // fix 2026-09-03 H240: the three keys are the only statuses probeThirdParty returns today, so a
       // fourth one made the comparator return NaN and the order implementation-defined. An unknown status
       // now sorts last, deterministically, and ties break on the registry id so the listing is stable.
-      const rank = { online: 0, offline: 1, unverified: 2 };
+      const rank = { online: 0, gated: 1, offline: 2, unverified: 3 }; // fix 2026-09-05: gated sorts between online and offline
       const rankOf = (a) => rank[a.status] ?? 9;
       agents.sort((a, b) => rankOf(a) - rankOf(b) || (a.identity?.erc8004Id ?? 0) - (b.identity?.erc8004Id ?? 0));
       return {
@@ -174,7 +176,7 @@ export async function listAgents() {
         agents,
         totalMatched: d.totalMatched,
         cap: d.cap,
-        ...(d.stale ? { stale: true } : {}),
+        ...(d.stale ? { stale: true, ...(d.asOf ? { asOf: d.asOf } : {}) } : {}),
         ...(d.unavailable ? { unavailable: true } : {}),
       };
     })
@@ -197,10 +199,11 @@ export async function agentDetail(id) {
       inputSchema: own.inputSchema,
       hire: {
         summary:
-          "Get a signed quote from the agent, then create and fund the job on-chain from your own wallet. This marketplace never holds funds or keys. The agent delivers on-chain, where the result is public.",
+          "Get a signed quote from the agent, then create and fund the job on-chain from your own wallet. This marketplace never holds funds or keys. The agent delivers on-chain, where the result is public. Or pay per call: POST the same job input to the agent's /x402 path with an x402 v2 payment in USDT, USDC, USD1 or U (Binance's B402 rail, 0.5) and the deliverable comes back in the response.",
         a2aEndpoint: own.endpoint,
         agentCard: `${own.endpoint}.well-known/agent-card.json`,
         quoteApi: `/api/agents/${own.id}/quote`,
+        payPerCall: `${own.endpoint}x402`, // 2026-09-05: the B402 rail, 402 with terms without a payment
         steps: [
           "Get a quote. The price and terms come back signed by the agent's wallet",
           "Create and fund the job on-chain from your own wallet, attaching the signed quote",

@@ -1,108 +1,184 @@
 {
- "chainId": 56,
- "registry": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
- "paymentToken": {
-  "address": "0xcE24439F2D9C6a2289F741120FE202248B666666",
-  "symbol": "U",
-  "decimals": 18
- },
- "testBuyers": [
-  "0x9D16bb4b2ed89AAFC8390998ed2d3254aF6e513b"
- ],
- "agents": [
-  {
-   "id": "rebalancer",
-   "category": "rebalancing",
-   "name": "Portfolio Rebalancer",
-   "oneLiner": "Computes the exact trades that bring a portfolio back to its target weights",
-   "endpoint": "https://agents.chainhelix.io/rebalancer/",
-   "localPort": 9101,
-   "wallet": "0x72070fAa1e33D7F8b31397Bc8DA65be2b1f6281f",
-   "erc8004Id": 269223,
-   "inputSchema": {
-    "note": "Send each field as an object keyed by symbol, not a list. The whole job spec is sent as JSON text in task_description.",
-    "required": {
-     "holdings": "object {SYMBOL: amount}, current position sizes",
-     "targets": "object {SYMBOL: weight}, target weights, must sum to 1",
-     "prices": "object {SYMBOL: usd}, a price for every symbol held or targeted"
-    },
-    "optional": {
-     "driftThresholdPct": "ignore drift below this percent (default 1)",
-     "minTradeUsd": "drop trades smaller than this (default 5)"
-    }
-   }
+  "chainId": 56,
+  "registry": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  "paymentToken": {
+    "address": "0xcE24439F2D9C6a2289F741120FE202248B666666",
+    "symbol": "U",
+    "decimals": 18
   },
-  {
-   "id": "gridtrader",
-   "category": "grid",
-   "name": "Grid Trader",
-   "oneLiner": "Lays out a buy/sell grid around the current price, sized to a budget and avoiding known walls",
-   "endpoint": "https://agents.chainhelix.io/gridtrader/",
-   "localPort": 9102,
-   "wallet": "0xb8143345687aa5a527f4f9568d508ebbc612d06d",
-   "erc8004Id": 269224,
-   "inputSchema": {
-    "note": "Send walls as an object keyed by price, not a list. The whole job spec is sent as JSON text in task_description.",
-    "required": {
-     "price": "current price of the traded asset",
-     "budgetUsd": "total budget to spread across the grid"
+  "testBuyers": [
+    "0x9D16bb4b2ed89AAFC8390998ed2d3254aF6e513b"
+  ],
+  "agents": [
+    {
+      "id": "rebalancer",
+      "category": "rebalancing",
+      "name": "Portfolio Rebalancer",
+      "oneLiner": "Computes the exact trades that bring a portfolio back to its target weights",
+      "endpoint": "https://agents.chainhelix.io/rebalancer/",
+      "localPort": 9101,
+      "wallet": "0x72070fAa1e33D7F8b31397Bc8DA65be2b1f6281f",
+      "erc8004Id": 269223,
+      "inputSchema": {
+        "note": "Send holdings, targets, prices as an object keyed by symbol, not a list. The whole job input is sent as JSON text in task_description. Example: {\"holdings\":{\"BTC\":1,\"ETH\":10},\"targets\":{\"BTC\":0.5,\"ETH\":0.5},\"prices\":{\"BTC\":60000,\"ETH\":2000},\"driftThresholdPct\":1}",
+        "required": {
+          "holdings": "object {SYMBOL: amount}, current position sizes in token units, one key per symbol; also accepted as positions, balances, portfolio",
+          "targets": "object {SYMBOL: weight}, desired weights, must sum to 1; also accepted as targetWeights, weights, allocation",
+          "prices": "object {SYMBOL: usd}, a mark for every symbol in holdings or targets; also accepted as marks, quotes, pricesUsd"
+        },
+        "optional": {
+          "driftThresholdPct": "number, no-trade band per asset, default 1",
+          "minTradeUsd": "number, dust filter on emitted trades, default 5"
+        },
+        "aliases": {
+          "holdings": [
+            "positions",
+            "balances",
+            "portfolio"
+          ],
+          "targets": [
+            "targetWeights",
+            "weights",
+            "allocation"
+          ],
+          "prices": [
+            "marks",
+            "quotes",
+            "pricesUsd"
+          ]
+        }
+      }
     },
-    "optional": {
-     "levels": "grid levels per side, 1-50 (default 5)",
-     "spanPct": "grid span percent, < 100 (default 5)",
-     "walls": "object {price: touches}, known support/resistance walls to avoid",
-     "wallBandPct": "keep-away band around each wall (default 0.7)"
+    {
+      "id": "gridtrader",
+      "category": "grid",
+      "name": "Grid Trader",
+      "oneLiner": "Lays out a buy/sell grid around the current price, sized to a budget and avoiding known walls",
+      "endpoint": "https://agents.chainhelix.io/gridtrader/",
+      "localPort": 9102,
+      "wallet": "0xb8143345687aa5a527f4f9568d508ebbc612d06d",
+      "erc8004Id": 269224,
+      "inputSchema": {
+        "note": "Send walls as an object keyed by price, not a list. The whole job input is sent as JSON text in task_description. Example: {\"price\":691.65,\"budgetUsd\":1000,\"levels\":5,\"spanPct\":2,\"walls\":{\"677.8\":3,\"705.5\":2}}",
+        "required": {
+          "price": "number, current mark price; also accepted as mid, midPrice, mark, markPrice, currentPrice, spot",
+          "budgetUsd": "number, total capital to ladder; also accepted as capitalUsd, budget, capital, notionalUsd, sizeUsd"
+        },
+        "optional": {
+          "levels": "integer 1..50, grid lines per side, default 5; also accepted as gridLevels, nLevels",
+          "spanPct": "number, half-width of the grid in percent, below 100, default 5; or send lower and upper (absolute bounds) and the half-width is derived from the wider side; also accepted as rangePct, widthPct",
+          "lower": "number, grid lower bound in price; with upper, an alternative to spanPct",
+          "upper": "number, grid upper bound in price; with lower, an alternative to spanPct",
+          "walls": "object {price: touches}, known support/resistance walls keyed by price, touches is an integer 1 to 10000; levels on a wall are flagged",
+          "wallBandPct": "number, distance in percent that counts as on a wall, default 0.7"
+        },
+        "aliases": {
+          "price": [
+            "mid",
+            "midPrice",
+            "mark",
+            "markPrice",
+            "currentPrice",
+            "spot"
+          ],
+          "budgetUsd": [
+            "capitalUsd",
+            "budget",
+            "capital",
+            "notionalUsd",
+            "sizeUsd"
+          ],
+          "levels": [
+            "gridLevels",
+            "nLevels"
+          ],
+          "spanPct": [
+            "rangePct",
+            "widthPct"
+          ]
+        }
+      }
+    },
+    {
+      "id": "yieldopt",
+      "category": "yield",
+      "name": "Yield Allocator",
+      "oneLiner": "Splits capital across yield pools by risk-adjusted return with concentration caps",
+      "endpoint": "https://agents.chainhelix.io/yieldopt/",
+      "localPort": 9103,
+      "wallet": "0xccae2da18278c663fc808fa858fd89cc34cf701f",
+      "erc8004Id": 269226,
+      "inputSchema": {
+        "note": "Send pools as an object keyed by pool name, not a list. The whole job input is sent as JSON text in task_description. Example: {\"pools\":{\"pcs-wbnb-usdt\":{\"apyPct\":12.5,\"tvlUsd\":50000000,\"riskScore\":2},\"venus-usdt\":{\"apyPct\":6.1,\"tvlUsd\":200000000,\"riskScore\":1},\"new-farm\":{\"apyPct\":80,\"tvlUsd\":400000,\"riskScore\":5}},\"capitalUsd\":10000,\"maxPerPoolPct\":40}",
+        "required": {
+          "pools": "object {name: {apyPct, tvlUsd?, riskScore?}}, candidate pools keyed by name; riskScore 1 (safest) to 5, default 3; also accepted as opportunities, vaults, farms",
+          "capitalUsd": "number, capital to allocate; also accepted as budgetUsd, capital, budget, amountUsd"
+        },
+        "optional": {
+          "maxPerPoolPct": "number, max share of capital in one pool, at most 100, default 40",
+          "riskAversion": "number 0..1, 0 chases raw APY, 1 applies the full risk discount, default 0.5",
+          "tvlCapPct": "number, max share of a pool's TVL to hold, default 5"
+        },
+        "aliases": {
+          "pools": [
+            "opportunities",
+            "vaults",
+            "farms"
+          ],
+          "capitalUsd": [
+            "budgetUsd",
+            "capital",
+            "budget",
+            "amountUsd"
+          ]
+        }
+      }
+    },
+    {
+      "id": "healthmon",
+      "category": "health",
+      "name": "Health Factor Monitor",
+      "oneLiner": "Computes loan health factors, liquidation prices and PancakeSwap v3 LP range health",
+      "endpoint": "https://agents.chainhelix.io/healthmon/",
+      "localPort": 9104,
+      "wallet": "0x91f4602760e1627007bfc16f78a74cf8b9de8da2",
+      "erc8004Id": 269228,
+      "inputSchema": {
+        "note": "Send collateral, debt, prices, position, walls as an object keyed by symbol, not a list. The whole job input is sent as JSON text in task_description. Example: {\"collateral\":{\"ETH\":{\"amount\":10,\"liqThreshold\":0.8}},\"debt\":{\"USDT\":10000},\"prices\":{\"ETH\":2000,\"USDT\":1}}",
+        "required": {
+          "collateral": "object {SYMBOL: {amount, liqThreshold}}, liqThreshold in (0, 1]; required unless `position` is sent; also accepted as collaterals, supplied, deposits",
+          "debt": "object {SYMBOL: amount}, outstanding debt per symbol; required unless `position` is sent; also accepted as debts, borrowed, borrows, loans",
+          "prices": "object {SYMBOL: usd}, a mark for every collateral and debt symbol; also accepted as marks, quotes, pricesUsd"
+        },
+        "optional": {
+          "alertHF": "number, warning level, default 1.5",
+          "criticalHF": "number, critical level, must be below alertHF, default 1.1",
+          "position": "object {price, lowerPrice, upperPrice}, PancakeSwap v3 LP range health instead of lending health (do not send with collateral or debt); optional nearEdgePct, feesEarnedUsd, positionValueUsd, ageDays; returns range status, distance to each edge, position inside the band and the fee run-rate; also accepted as lpPosition, range",
+          "walls": "object {price: touches}, with position only: strong levels keyed by price, each range edge is annotated with the nearest one"
+        },
+        "aliases": {
+          "collateral": [
+            "collaterals",
+            "supplied",
+            "deposits"
+          ],
+          "debt": [
+            "debts",
+            "borrowed",
+            "borrows",
+            "loans"
+          ],
+          "prices": [
+            "marks",
+            "quotes",
+            "pricesUsd"
+          ],
+          "position": [
+            "lpPosition",
+            "range"
+          ]
+        }
+      }
     }
-   }
-  },
-  {
-   "id": "yieldopt",
-   "category": "yield",
-   "name": "Yield Allocator",
-   "oneLiner": "Splits capital across yield pools by risk-adjusted return with concentration caps",
-   "endpoint": "https://agents.chainhelix.io/yieldopt/",
-   "localPort": 9103,
-   "wallet": "0xccae2da18278c663fc808fa858fd89cc34cf701f",
-   "erc8004Id": 269226,
-   "inputSchema": {
-    "note": "Send pools as an object keyed by pool name, not a list. The whole job spec is sent as JSON text in task_description.",
-    "required": {
-     "capitalUsd": "capital to allocate",
-     "pools": "object {name: {apyPct, tvlUsd?, riskScore?}}, candidate pools (riskScore 1-5, default 3)"
-    },
-    "optional": {
-     "maxPerPoolPct": "max share of capital in one pool, <= 100 (default 40)",
-     "riskAversion": "0 = chase APY, 1 = minimize risk (default 0.5)",
-     "tvlCapPct": "cap any allocation to this percent of the pool's TVL (default 5)"
-    }
-   }
-  },
-  {
-   "id": "healthmon",
-   "category": "health",
-   "name": "Health Factor Monitor",
-   "oneLiner": "Computes loan health factors, liquidation prices and PancakeSwap v3 LP range health",
-   "endpoint": "https://agents.chainhelix.io/healthmon/",
-   "localPort": 9104,
-   "wallet": "0x91f4602760e1627007bfc16f78a74cf8b9de8da2",
-   "erc8004Id": 269228,
-   "inputSchema": {
-    "note": "Send each field as an object keyed by symbol, not a list. The whole job spec is sent as JSON text in task_description.",
-    "required": {
-     "collateral": "object {SYMBOL: {amount, liqThreshold}}, liqThreshold in (0, 1]",
-     "debt": "object {SYMBOL: amount}",
-     "prices": "object {SYMBOL: usd}, a price for every symbol used"
-    },
-    "optional": {
-     "alertHF": "warn below this health factor (default 1.5)",
-     "criticalHF": "critical below this health factor, must be < alertHF (default 1.1)"
-    },
-    "alternate": {
-     "position": "object {price, lowerPrice, upperPrice} for a PancakeSwap v3 LP range-health report; optional nearEdgePct, feesEarnedUsd, positionValueUsd, ageDays",
-     "walls": "optional object {price: touches}; annotates each range edge with the nearest strong level",
-     "returns": "range status (in_range, near_lower_edge, near_upper_edge, out_of_range_below, out_of_range_above), distance to each edge, position inside the band, fee run-rate when fees, value and age are supplied"
-    }
-   }
-  }
- ]
+  ]
 }
