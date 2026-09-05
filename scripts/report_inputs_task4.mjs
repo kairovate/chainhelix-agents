@@ -1,4 +1,4 @@
-// Captures the shared inputs for Advantage Report task 4 at run start.
+// Captures the shared inputs for Hire Report task 4 at run start.
 import { writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";

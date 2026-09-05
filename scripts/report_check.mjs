@@ -1,4 +1,4 @@
-// Independent rubric checker for Advantage Report tasks 2, 3 and 4.
+// Independent rubric checker for Hire Report tasks 2, 3 and 4.
 // Recomputes from first principles per the published formulas; shares no code
 // with the agents. Collateral is aggregated by symbol before the per-asset
 // solve (2026-09-02), so the check does not share the agents' former
@@ -9,6 +9,15 @@
 import { readFileSync } from "fs";
 
 const [, , kind, inputsPath, outputPath] = process.argv;
+// 2026-09-05 sweep: a bare run printed a stack trace from readFileSync(undefined); the usage is printed instead,
+// with the three commands that check the committed files.
+if (!["grid", "health", "rebalance"].includes(kind) || !inputsPath || !outputPath) {
+  console.error("usage: node scripts/report_check.mjs <grid|health|rebalance> <inputs.json> <output.json>\n" +
+    "  node scripts/report_check.mjs grid      reports/inputs-2026-08-19T14-08-23-148Z.json reports/out-grid.json\n" +
+    "  node scripts/report_check.mjs health    reports/inputs-2026-08-19T14-08-23-148Z.json reports/out-health.json\n" +
+    "  node scripts/report_check.mjs rebalance reports/inputs4-2026-08-19T19-07-57-388Z.json reports/out-rebalance.json");
+  process.exit(2);
+}
 const inputs = JSON.parse(readFileSync(inputsPath, "utf8"));
 const out = JSON.parse(readFileSync(outputPath, "utf8"));
 const results = [];

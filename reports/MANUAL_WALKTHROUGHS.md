@@ -1,6 +1,6 @@
 # Manual baseline walkthroughs
 
-Instructions for the manual side of the Advantage Report. Written for a
+Instructions for the manual side of the Hire Report. Written for a
 non-specialist: no prior trading or DeFi knowledge assumed. You execute every
 step yourself; these pages give the method (all of it public knowledge), never
 the answers.
@@ -77,7 +77,7 @@ and the on-wall marks.
 
 You need: a free chart. Open tradingview.com, search BNBUSDT (Binance), no
 account needed for basics. You will write 5 short sections in a text file.
-There is no answer key; write what you actually see, in your own words.
+There is no answer key; write what you see, in your own words.
 
 1. REGIME. Set the chart to 1 day candles, look at the last 3 to 4 weeks.
    Sideways inside a band = "ranging". Clear staircase up or down = 
