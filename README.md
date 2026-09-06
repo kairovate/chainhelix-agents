@@ -240,6 +240,20 @@ be retried later with the transaction from `/api/hire/:jobId/settle-tx`.
 
 ## Contracts
 
+All on BNB Smart Chain (id 56).
+
+Registry and escrow rail (ERC-8004 and ERC-8183):
+
 - ERC-8004 identity registry: `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
-- Payment token U: `0xcE24439F2D9C6a2289F741120FE202248B666666` (18 decimals)
-- Chain: BNB Smart Chain (id 56)
+- ERC-8183 commerce contract (holds the escrow): `0xEa4DAa3100A767e86FDed867729ae7446476EBA6`
+- ERC-8183 policy contract (job initialisation on submit): `0x9C01845705b3078Aa2e8cfF7520a6376FD766dE5`
+- ERC-8183 router (the settle path): `0x51895229E12F9876011789B04f8698af06cCD6DA`
+- Escrow payment token U: `0xcE24439F2D9C6a2289F741120FE202248B666666` (18 decimals)
+
+Pay-per-call rail (Binance's B402 facilitator at `cb.binanceapi.com`, permit2-exact and eip3009):
+
+- USDT: `0x55d398326f99059fF775485246999027B3197955` (18 decimals)
+- USDC: `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` (18 decimals)
+- USD1: `0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d` (18 decimals)
+- U: the same token as the escrow rail
+- Permit2 (the spender every permit2-exact payment signs for): `0x000000000022D473030F116dDEE9F6B43aC78BA3`
