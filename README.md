@@ -4,8 +4,9 @@ A marketplace for on-chain service agents on BNB Smart Chain, live at
 [agents.chainhelix.io](https://agents.chainhelix.io/).
 
 Agents on the ERC-8004 registry are listed, probed and hireable. Payment runs
-through the ERC-8183 commerce contracts in the U stablecoin, with escrow and an
-optimistic evaluation window. The marketplace itself holds no keys and cannot
+two ways: per job through the ERC-8183 commerce contracts in the U stablecoin,
+with escrow and an optimistic evaluation window, or per call over Binance's
+B402 rail in USDT, USDC, USD1 or U. The marketplace itself holds no keys and cannot
 spend: every hire transaction is prepared server-side and signed by the buyer's
 own wallet. It does decide what that transaction contains, which is why the
 transaction is checked before it is signed rather than trusted: the
@@ -31,7 +32,7 @@ quoted price, and a wallet shows the buyer the same fields.
   baselines in [reports/MANUAL_WALKTHROUGHS.md](reports/MANUAL_WALKTHROUGHS.md).
 - Every figure in the report is recomputed by
   [scripts/report_check.mjs](scripts/report_check.mjs) from the committed
-  inputs and outputs in `reports/`, with no code shared with the agents:
+  inputs and outputs in `reports/`, and it reuses none of the agents' code:
 
   ```
   node scripts/report_check.mjs grid      reports/inputs-2026-08-19T14-08-23-148Z.json reports/out-grid.json
@@ -58,7 +59,7 @@ PancakeSwap. The health agent reports PancakeSwap v3 LP range health for a posit
 
 ## Transactions
 
-Every claim on this page has a transaction behind it. All of them are on BNB Smart Chain (id 56), in the payment token U. The ERC-8183 commerce contract that holds the escrow is `0xEa4DAa3100A767e86FDed867729ae7446476EBA6`, the policy contract `0x9C01845705b3078Aa2e8cfF7520a6376FD766dE5` and the router `0x51895229E12F9876011789B04f8698af06cCD6DA`.
+Every claim on this page has a transaction behind it. All of them are on BNB Smart Chain (id 56). The escrow hires are in the payment token U; the pay-per-call purchases are in USDT, USDC, USD1 or U. The ERC-8183 commerce contract that holds the escrow is `0xEa4DAa3100A767e86FDed867729ae7446476EBA6`, the policy contract `0x9C01845705b3078Aa2e8cfF7520a6376FD766dE5` and the router `0x51895229E12F9876011789B04f8698af06cCD6DA`.
 
 ### Escrow hires, funded, submitted and settled
 
@@ -116,6 +117,8 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 | `yieldopt/` | Yield Allocator, seller agent (ERC-8004 id 269226) |
 | `healthmon/` | Health Factor Monitor, seller agent (ERC-8004 id 269228) |
 | `strategies/` | Shared strategy library the four agents run, with its golden tests |
+| `x402multi/` | The agents' pay-per-call route: x402 v2 terms, verification and settlement through Binance's B402 facilitator in USDT, USDC, USD1 or U, redemption and replay rules, with its tests |
+| `marketplace/src/rpc.js` | Chain reads with a primary and a fallback RPC endpoint: availability failures fall back, deterministic answers are never replayed |
 | `docs/PROBE_SPEC.md` | The open probe specification |
 | `reports/` | The Hire Report, task sheets, manual walkthroughs, and the committed inputs and outputs of every run |
 | `scripts/hire.mjs` | Command-line hire client that drives the public API end to end |
@@ -170,7 +173,10 @@ Every registration on the ERC-8004 identity registry is enumerated, then
 probed from its own on-chain data: tokenURI, the registration file, the
 declared endpoint, the agent card. Results are served as a live map at
 [agents.chainhelix.io/api/verified](https://agents.chainhelix.io/api/verified)
-and per agent at `/api/verify/:id`, with the full probe history. Hireable
+and per agent at `/api/verify/:id`, with the full probe history. An agent
+that drops off the live map keeps the live probe cadence for 24 hours from its
+last live probe, so one failed probe during a restart does not move it to the
+backfill cadence. Hireable
 agents outside our own four are put through a paid test hire daily, capped at
 0.2 U per job and three paid jobs per run; the record carries every
 transaction hash. Every alive or hireable probe record is written to
@@ -210,7 +216,9 @@ npm start        # serves on 127.0.0.1:9110 by default
 ```
 
 Configuration is environment-driven; see `marketplace/src/config.js`. The
-service needs nothing but a BNB Smart Chain RPC endpoint.
+service needs a BNB Smart Chain RPC endpoint, with a second one as fallback,
+and reads the public 8004scan directory API for discovery; a directory API key
+is optional.
 
 ## Running an agent
 
