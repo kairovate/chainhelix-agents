@@ -32,7 +32,7 @@ startJobStats();
 // req.ip is the address nginx itself saw; spoofed entries are ignored.
 const app = Fastify({ logger: true, trustProxy: 1 });
 
-// Per-IP fixed-window rate limit, small, honest, no dependency.
+// Per-IP fixed-window rate limit, small, no dependency.
 const hits = new Map();
 app.addHook("onRequest", async (req, reply) => {
   const now = Date.now();

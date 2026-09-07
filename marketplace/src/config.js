@@ -1,5 +1,6 @@
 // Central config, no secrets anywhere in this service; it holds no keys and
 // signs nothing. All values overridable by env for tests.
+import { createRequire } from "node:module";
 export const PORT = Number(process.env.MARKETPLACE_PORT || 9110);
 export const HOST = process.env.MARKETPLACE_HOST || "127.0.0.1";
 export const RPC_URL = process.env.RPC_URL || "https://bsc-rpc.publicnode.com";
@@ -9,20 +10,21 @@ export const SCAN_SITE = "https://8004scan.io";
 // 2026-09-05: the directory's agent pages moved from /agents/<chainId>:<registry>:<id> (now 404) to
 // /agents/<chain slug>/<id>; "bsc" is the slug it uses for BNB Smart Chain.
 export const SCAN_CHAIN_SLUG = "bsc";
-// 2026-09-05: the 8004scan Pro tier key, from the unit environment only (SCAN_API_KEY; header name SCAN_API_KEY_HEADER,
-// default x-api-key). The header goes ONLY to the directory's own host family, never to an agent endpoint or a gateway.
+// 2026-09-07 (build plan B3): the directory is read through the ONE shared client, shared/directory.cjs at the repo
+// root, the same code the ChainHelix MCP runs: https only, private addresses refused, the resolved address pinned,
+// redirects followed by hand within the www/apex host family, the Pro key (SCAN_API_KEY, header SCAN_API_KEY_HEADER,
+// default x-api-key, read at call time) only to the directory's own host family, a 1 MB body cap, and the listing
+// check (200 + items array, or a failure). `directory` holds "unavailable" for SCAN_RETRY_MS (default 60 s) after a
+// failure so a page never waits on the timeout twice a minute; `directoryBatch` (the enumerator) has its own retry
+// ladder and no hold. DIRECTORY_HOLD_MS overrides the hold for every reader; SCAN_RETRY_MS is the marketplace's name.
+const sharedDirectory = createRequire(import.meta.url)("../../shared/directory.cjs");
+const HOLD_MS = Number(process.env.DIRECTORY_HOLD_MS ?? process.env.SCAN_RETRY_MS ?? 60_000);
+export const directory = sharedDirectory.createDirectory({ apiBase: SCAN_API, site: SCAN_SITE, chainSlug: SCAN_CHAIN_SLUG, chainId: 56, timeoutMs: 10_000, maxBytes: 1_048_576, holdMs: HOLD_MS, name: "marketplace directory", userAgent: "ChainHelix-Marketplace/1 (+https://agents.chainhelix.io)" });
+export const directoryBatch = sharedDirectory.createDirectory({ apiBase: SCAN_API, site: SCAN_SITE, chainSlug: SCAN_CHAIN_SLUG, chainId: 56, timeoutMs: 20_000, maxBytes: 1_048_576, holdMs: 0, name: "marketplace enumerator", userAgent: "ChainHelix-Verified/1 (+https://agents.chainhelix.io)" });
 export const SCAN_API_KEY = process.env.SCAN_API_KEY || "";
 export const SCAN_API_KEY_HEADER = process.env.SCAN_API_KEY_HEADER || "x-api-key";
-function hostFamily(h) { return String(h || "").toLowerCase().replace(/^www\./, ""); }
-export function scanHeaders(url) {
-  const h = { Accept: "application/json" };
-  const key = process.env.SCAN_API_KEY || SCAN_API_KEY; // read at call time: a key set after boot is used without a restart
-  if (!key) return h;
-  const name = process.env.SCAN_API_KEY_HEADER || SCAN_API_KEY_HEADER;
-  try { if (hostFamily(new URL(url).hostname) === hostFamily(new URL(SCAN_API).hostname)) h[name] = key; } catch { /* not a url */ }
-  return h;
-}
-export function scanAgentUrl(erc8004Id) { return `${SCAN_SITE}/agents/${SCAN_CHAIN_SLUG}/${Number(erc8004Id)}`; }
+export function scanHeaders(url) { return directory.headers(url); }
+export function scanAgentUrl(erc8004Id) { return directory.agentUrl(erc8004Id); }
 export const BSCSCAN = "https://bscscan.com";
 export const NETWORK = "bsc-mainnet";
 export const CHAIN_ID = 56;

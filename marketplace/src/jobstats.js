@@ -25,7 +25,7 @@ const TAIL = 300; // recent jobs rescanned every sweep (status still moving)
 // note 2026-09-03 H253: that map holds one entry per job id ever created and is rewritten whole on every
 // save (every 25 batches and again at the end of each 10-minute sweep). Measured 2026-09-03: 56,693 ids,
 // 3.5 MB on disk, in a service that runs under MemoryMax=768M with the state parsed into the same heap at
-// import. It cannot simply be dropped, because the reversal above needs it. If the id count or the file
+// import. It cannot be dropped, because the reversal above needs it. If the id count or the file
 // size grows materially, this is the piece to change first, and the shape to copy is verify.js, which
 // writes its state in pieces instead of one JSON.stringify.
 // fix 2026-09-02 H194 H251: the state was written in place (3.5 MB, no temp-and-rename) and a corrupt or partial
@@ -82,7 +82,7 @@ function bump(providerKey, statusKey, delta) {
 // catch { return null; }`), so a null is "no answer", not "no job". The reversal below used to run before
 // the guard, which silently deleted an already-counted completed job from its provider's all-time total on
 // any transient null; it came back only if the id fell inside the next sweep's 300-job tail. A null now
-// leaves the previous contribution alone. A job that really carries no provider still reverses, because
+// leaves the previous contribution alone. A job that carries no provider still reverses, because
 // that is a real change of state. JOBSTATS_KEEP_ON_NULL=0 restores the old order.
 const KEEP_ON_NULL = process.env.JOBSTATS_KEEP_ON_NULL !== "0";
 // fix 2026-09-03 H195 H252: an unrecognised contract status used to be counted as "open". STATUS_KEY covers

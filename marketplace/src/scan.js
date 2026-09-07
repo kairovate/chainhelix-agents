@@ -1,89 +1,21 @@
-// 8004scan indexer client, the reputation + discovery source. Read-only,
-// public API, no auth. Every number returned carries its source link so the
-// UI/API can point at where it came from.
+// 8004scan indexer client, the reputation + discovery source. Read-only, public API.
+// Every number returned carries its source link so the UI/API can point at where it came from.
+// 2026-09-07 (build plan B3): the transport is the ONE shared directory client (shared/directory.cjs, configured in
+// config.js as `directory`): the 1 MB cap (redteam A7, 2026-08-20), the by-hand redirects with the www/apex host
+// guard (H187 2026-09-03, directory move 2026-09-05), the Pro key header to the directory host only (2026-09-05), the
+// listing check (200 with an items array; the directory's DATABASE_ERROR is a 500 with a JSON body, MCP lesson
+// 2026-09-05), the private-address refusal and the resolved-address pin (the MCP's M119 rule) and the 60 s hold
+// after a failure all live there now and are the same for the marketplace and the MCP. This file keeps what is the
+// marketplace's own: the memory cache with its stale fallback, the discovery disk copy, the record shapes.
+// SCAN_REDIRECT_STRICT=0 (redirect: "follow") is gone: the guard is the rule for both products.
 import { readFileSync, writeFileSync, renameSync } from "fs";
-import { SCAN_API, CHAIN_ID, DISCOVERY, DISCOVERY_CAP, TTL, scanAgentUrl, scanHeaders } from "./config.js";
+import { SCAN_API, DISCOVERY, DISCOVERY_CAP, TTL, scanAgentUrl, directory } from "./config.js";
 import { cached, getStale, set } from "./cache.js";
 
+export function sameScanOrigin(url, apiBase = SCAN_API) { return directory.sameOrigin(url, apiBase); }
 
-// 2026-08-20 hardening (redteam A7): bounded body read for external JSON reads.
-// A misbehaving upstream must not be able to stream us into the memory limit;
-// 1MB is far above any legitimate response on this path.
-const MAX_JSON_BYTES = 1_048_576;
-async function jsonCapped(res) {
-  const reader = res.body.getReader();
-  const chunks = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.length;
-    if (size > MAX_JSON_BYTES) throw new Error("response body too large");
-    chunks.push(value);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-
-// fix 2026-09-03 H187: this read followed redirects with no per-hop check, while the sibling probe.js
-// re-checks its allowlist on every hop ("redirect to disallowed host"). SCAN_API is a fixed operator-set
-// endpoint, so this only matters if that endpoint is hijacked, and the 1 MB cap and 10 s abort still
-// applied either way; two sibling files should not have two redirect policies for the same class of read.
-// Redirects are now followed by hand and every hop must stay on the configured SCAN_API origin over https.
-// SCAN_REDIRECT_STRICT=0 restores redirect: "follow".
-const REDIRECT_STRICT = process.env.SCAN_REDIRECT_STRICT !== "0";
-const MAX_REDIRECTS = 3;
-// 2026-09-05: the directory came back from an outage answering every request on its www host with a 308
-// to its apex host, and the origin guard here refused that hop ("redirect to disallowed host"), so the
-// site read "directory unreachable" while the directory was up. A redirect between the configured host
-// and its www or apex twin is the same operator moving the front door, so that one pair is allowed; any
-// other host, a different port or a scheme downgrade is still refused.
-function scanHostFamily(hostname) {
-  return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
-}
-export function sameScanOrigin(url, apiBase = SCAN_API) {
-  try {
-    const u = new URL(url), c = new URL(apiBase);
-    return u.protocol === c.protocol && u.port === c.port && scanHostFamily(u.hostname) === scanHostFamily(c.hostname);
-  } catch {
-    return false;
-  }
-}
-
-async function scanFetch(path) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 10_000);
-  try {
-    if (!REDIRECT_STRICT) {
-      const res = await fetch(`${SCAN_API}${path}`, {
-        signal: ctrl.signal,
-        redirect: "follow",
-        headers: scanHeaders(`${SCAN_API}${path}`),
-      });
-      if (!res.ok) throw new Error(`8004scan ${res.status}`);
-      return await jsonCapped(res);
-    }
-    let current = `${SCAN_API}${path}`;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      const res = await fetch(current, {
-        signal: ctrl.signal,
-        redirect: "manual", // fix 2026-09-03 H187
-        headers: scanHeaders(current), // 2026-09-05: the Pro key rides only to the directory's own host
-      });
-      if (res.status >= 300 && res.status < 400) {
-        const loc = res.headers.get("location");
-        if (!loc) throw new Error("8004scan redirect without location");
-        current = new URL(loc, current).href;
-        if (!sameScanOrigin(current)) throw new Error("8004scan redirect to disallowed host");
-        continue;
-      }
-      if (!res.ok) throw new Error(`8004scan ${res.status}`);
-      return await jsonCapped(res);
-    }
-    throw new Error("8004scan too many redirects");
-  } finally {
-    clearTimeout(t);
-  }
-}
+// one listing read: HTTP 200 with an items array, or a thrown DirectoryError (the callers' catch is the fallback)
+async function scanFetch(path) { return directory.listing(path); }
 
 function agentLink(item) {
   return scanAgentUrl(item.token_id); // 2026-09-05: the directory's page scheme changed, see config.js
@@ -111,7 +43,7 @@ function publicRecord(item) {
 export async function scanAgent(erc8004Id, nameHint) {
   return cached(`scan:agent:${erc8004Id}`, TTL.scan, async () => {
     const q = encodeURIComponent(nameHint || String(erc8004Id));
-    const d = await scanFetch(`/agents?limit=20&chain_id=${CHAIN_ID}&search=${q}`);
+    const d = await scanFetch(`/agents?limit=20&chain_id=${directory.chainId}&search=${q}`);
     const hit = (d.items || []).find((x) => Number(x.token_id) === Number(erc8004Id));
     return hit ? publicRecord(hit) : null;
   }).catch(() => {
@@ -159,7 +91,7 @@ export async function discoverCategory(category, excludeIds) {
   const { search, pattern } = DISCOVERY[category];
   return cached(`scan:discover:${category}`, TTL.scan, async () => {
     const d = await scanFetch(
-      `/agents?limit=25&chain_id=${CHAIN_ID}&search=${encodeURIComponent(search)}`
+      `/agents?limit=25&chain_id=${directory.chainId}&search=${encodeURIComponent(search)}`
     );
     const items = (d.items || [])
       .filter((x) => !x.is_testnet)

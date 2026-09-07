@@ -18,7 +18,7 @@ export function getStale(key) {
 // were ALREADY expired, so 5000 was not a cap (9000 live entries were retained, measured) and the entries it
 // did remove were exactly the ones getStale exists to serve as the upstream-down fallback. One mechanism for
 // all three: no bulk expiry sweep, a real ceiling, and eviction by oldest write so a stale fallback survives
-// until the store actually needs the room. Re-inserting on set keeps the Map in oldest-write-first order.
+// until the store needs the room. Re-inserting on set keeps the Map in oldest-write-first order.
 // MARKETPLACE_CACHE_BOUND=0 restores the old expired-only prune. MARKETPLACE_CACHE_MAX sets the ceiling.
 const CACHE_BOUND = process.env.MARKETPLACE_CACHE_BOUND !== "0";
 const MAX_ENTRIES = Number(process.env.MARKETPLACE_CACHE_MAX || 5000);

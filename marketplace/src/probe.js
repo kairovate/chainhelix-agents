@@ -189,7 +189,7 @@ export function extractEndpoint(meta) {
 
 // fix 2026-09-05 (brief part 4): 25,296 registrations (8.3 percent of the index, 25,272 of them on one
 // platform) declare an endpoint carrying an unsubstituted template such as
-// https://host/api/v1/a2a/agents/{agentId}. The probe fetched the braces literally, got nothing, and the
+// https://host/api/v1/a2a/agents/{agentId}. The probe fetched the braces, got nothing, and the
 // registration was counted offline over a URL we never resolved. The registry id IS the value the template
 // wants; substitute it before probing and keep the raw form beside it. Off unless VERIFY_RESOLVE_TEMPLATES=1
 // so the running loops do not change behaviour before the operator's restart window.
@@ -281,7 +281,7 @@ async function declaredEndpoint(erc8004Id) {
   });
 }
 
-// Status ladder, cheapest honest version:
+// Status ladder, cheapest version:
 //   online      declared endpoint served a valid agent card just now
 //   offline     an endpoint is declared on-chain but did not answer
 //   unverified  the registration declares no reachable service endpoint
