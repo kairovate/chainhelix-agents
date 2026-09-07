@@ -32,8 +32,8 @@ test("the page states the verdict, the three checks, the hashes, the seal and th
 test("the list page and the connected sites strip", () => {
   const html = renderDeliveryList(deliveryList(10));
   assert.match(html, /1 check on record/); assert.match(html, /href="\/d\/4242"/);
-  assert.match(html, /<b>Agent Market<\/b>/); assert.match(html, /href="https:\/\/mcp\.chainhelix\.io">For machines/); assert.match(html, /href="https:\/\/chainhelix\.io">ChainHelix/);
-  assert.match(sitesStrip("machines"), /<b>For machines<\/b>/);
+  assert.match(html, /href="https:\/\/mcp\.chainhelix\.io">For machines/); assert.match(html, /href="https:\/\/chainhelix\.io">ChainHelix/);
+  assert.doesNotMatch(sitesStrip("machines"), /For machines/); assert.match(sitesStrip("machines"), /Agent Market/);
 });
 test("no record file: empty list, nothing thrown", () => {
   process.env.DELIVERY_CLAIMS_FILE = join(dir, "missing.json");
