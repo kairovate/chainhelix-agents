@@ -314,7 +314,7 @@ export async function jobSpec(jobId: number): Promise<JobDescription | null> {
  * Sign + broadcast the on-chain `submit` for `jobId`.
  *
  * Delegates to `@bnbagent/studio-runtime/erc8183` `submitWorkflow`, which
- * re-verifies the job is genuinely FUNDED + assigned to us (via the SDK's
+ * re-verifies the job is FUNDED + assigned to us (via the SDK's
  * `ERC8183JobOps.verifyJob`), builds the `DeliverableManifest`, uploads it
  * to storage, and calls on-chain `submit`, all `auditedOp`-wrapped.
  * Returns the `SubmitResult` (`.submitTx` + `.deliverableUrl`);

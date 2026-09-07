@@ -14,8 +14,10 @@
 var fs = require('fs');
 var path = require('path');
 
-var REDEMPTION_TTL_MS = 24 * 3600e3;      // a paid, unserved call can be redeemed for a day
-var NONCE_GUARD_TTL_MS = 30 * 24 * 3600e3; // a spent nonce is refused for a month
+// 2026-09-07 B1: the redemption and replay rules live in ./redemption.cjs, shared with the MCP. Before B1 this file
+// tombstoned only served ('done') records at 24h and left an owed record redeemable for 30 days, while the MCP closed
+// the window on both at 24h; the shared store keeps the MCP's rule, the one the 402 terms advertise.
+var createRedemptionStore = require('./redemption.cjs').createRedemptionStore;
 
 function createMultiSeller(opts) {
   var lane = opts.lane || require('./b402.cjs');
@@ -28,29 +30,11 @@ function createMultiSeller(opts) {
   var workTimeoutMs = Number(opts.workTimeoutSeconds || 60) * 1000;
   var dataDir = opts.dataDir;
   var log = opts.log || function (m) { console.log('[x402multi] ' + m); };
-  var stateFile = path.join(dataDir, 'paystate.json');
-  var settled = {}; // nonce -> { status: 'owed'|'done'|'used', body?, at, payer, tx, network }
-
   try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) {}
-  try {
-    var saved = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    var now = Date.now();
-    Object.keys(saved.settled || {}).forEach(function (k) { if (now - (saved.settled[k].at || 0) < NONCE_GUARD_TTL_MS) settled[k] = saved.settled[k]; });
-  } catch (e) { /* first boot */ }
-  function save() {
-    try { fs.writeFileSync(stateFile + '.tmp', JSON.stringify({ settled: settled })); fs.renameSync(stateFile + '.tmp', stateFile); }
-    catch (e) { log('state save failed: ' + e.message); }
-  }
-  function remember(nonce, rec) { if (!nonce) return; rec.at = Date.now(); settled[nonce] = rec; save(); }
-  setInterval(function () {
-    var now = Date.now();
-    Object.keys(settled).forEach(function (k) {
-      var r = settled[k];
-      if (r.status === 'done' && now - r.at > REDEMPTION_TTL_MS) { settled[k] = { status: 'used', at: r.at, payer: r.payer, tx: r.tx, network: r.network }; }
-      else if (now - r.at > NONCE_GUARD_TTL_MS) delete settled[k];
-    });
-    save();
-  }, 3600e3).unref();
+  var store = createRedemptionStore({ file: path.join(dataDir, 'paystate.json'), log: log });
+  var settled = store.settled; // nonce -> { status: 'owed'|'done'|'used', body?, at, payer, tx, network }
+  function remember(nonce, rec) { store.remember(nonce, rec); }
+  store.startPruner(3600e3);
 
   lane.init(env, { payTo: payTo, dataDir: path.join(dataDir, 'lane'), onLateSettle: function (nonce, payload, tx, reqs) {
     var au = payload && payload.payload && (payload.payload.authorization || payload.payload.permit2Authorization);
@@ -88,18 +72,25 @@ function createMultiSeller(opts) {
     } catch (e) { /* plain text */ }
     return String(body);
   }
+  // sweep 2026-09-07 (S5): the nonce is the key of the redemption store and the replay guard, so it must be a bounded
+  // string (both methods carry a hex nonce; 200 characters is far above any). A payment without one is refused before
+  // verify: settled unrecorded, it could neither be redeemed nor replay-guarded.
   function parsePayment(headers) {
     var hdr = headers['payment-signature'] || headers['x-payment'];
     if (!hdr) return null;
+    if (String(hdr).length > 65536) return null;
     try {
       var payload = JSON.parse(Buffer.from(String(hdr), 'base64').toString('utf8'));
       var auth = payload && payload.payload && (payload.payload.authorization || payload.payload.permit2Authorization);
       var payer = null;
       var f = String((auth && auth.from) || '').toLowerCase();
       if (/^0x[0-9a-f]{40}$/.test(f)) payer = f;
-      return { payload: payload, nonce: (auth && auth.nonce) || null, payer: payer };
+      var nonce = auth && auth.nonce;
+      if (typeof nonce !== 'string' || !nonce || nonce.length > 200 || !/^[0-9a-zA-Z_:-]+$/.test(nonce)) nonce = null;
+      return { payload: payload, nonce: nonce, payer: payer };
     } catch (e) { return null; }
   }
+  var inflight = {}; // nonce -> true while a payment is being verified, settled or served (S5: one run per payment)
   // OUR terms entry the payer signed for: matched on (network, scheme, asset, method), the method read from the
   // payload's own shape; requirements are never taken from the payer
   function reqsFor(parsed) {
@@ -150,25 +141,36 @@ function createMultiSeller(opts) {
     if (!lane.isReady()) return json(503, { error: 'pay-per-call rail is not ready (facilitator not confirmed); retry shortly' });
     var prompt = promptFrom(request).trim();
     if (!prompt) return json(400, { error: 'x402 request requires a job input: send it as the request body' });
-    var known = parsed.nonce && settled[parsed.nonce];
+    if (!parsed.nonce) return terms('the payment carries no usable nonce');
+    var known = settled[parsed.nonce];
     if (known) {
       if (known.status === 'done' && known.body) return json(200, known.body, receipt(known.tx, known.network, known.payer));
-      if (known.status === 'owed') return serve(parsed.nonce, known.payer || parsed.payer, known.tx, known.network, prompt);
+      if (known.status === 'owed') {
+        if (inflight[parsed.nonce]) return json(409, { error: 'this payment is being served; retry this exact request with the same payment header in a moment' });
+        inflight[parsed.nonce] = true;
+        try { return await serve(parsed.nonce, known.payer || parsed.payer, known.tx, known.network, prompt); } finally { delete inflight[parsed.nonce]; }
+      }
       return terms('this payment was already used');
     }
-    var reqs = reqsFor(parsed);
-    if (!reqs) return terms('the payment names terms this resource does not offer');
-    if (!signedTermsMatch(parsed.payload, reqs)) return terms('the signed payment does not pay this resource its price');
-    var ok = await new Promise(function (resolve) { lane.verify(parsed.payload, reqs, function (v) { resolve(!!v); }); });
-    if (!ok) return terms('payment verification failed');
-    var s = await new Promise(function (resolve) { lane.settle(parsed.payload, reqs, parsed.nonce, parsed.payer, function (sok, tx, pending, reason) { resolve({ ok: sok, tx: tx, pending: pending, reason: reason }); }, null); });
-    if (!s.ok) {
-      if (s.pending) return json(402, { x402Version: 2, error: 'payment settlement is pending confirmation. Do not sign a new payment: retry this exact request with the SAME payment header to redeem it once settled.', resource: { url: resourceUrl, description: description, mimeType: 'application/json' }, accepts: [] });
-      return terms('payment settlement failed' + (s.reason ? ': ' + s.reason : ''));
-    }
-    remember(parsed.nonce, { status: 'owed', payer: parsed.payer, tx: s.tx, network: reqs.network });
-    log('PAID ' + (lane.assets()[reqs.extra && reqs.extra.name] || {}).symbol + ' tx ' + (s.tx || '') + ' payer ' + parsed.payer);
-    return serve(parsed.nonce, parsed.payer, s.tx, reqs.network, prompt);
+    // S5: the same header sent many times at once used to pass this point together, and every copy was verified,
+    // settled (idempotent at the facilitator) and served: one payment, many runs of the work. One run per nonce.
+    if (inflight[parsed.nonce]) return json(409, { error: 'this payment is being processed; retry this exact request with the same payment header in a moment, no second charge' });
+    inflight[parsed.nonce] = true;
+    try {
+      var reqs = reqsFor(parsed);
+      if (!reqs) return terms('the payment names terms this resource does not offer');
+      if (!signedTermsMatch(parsed.payload, reqs)) return terms('the signed payment does not pay this resource its price');
+      var ok = await new Promise(function (resolve) { lane.verify(parsed.payload, reqs, function (v) { resolve(!!v); }); });
+      if (!ok) return terms('payment verification failed');
+      var s = await new Promise(function (resolve) { lane.settle(parsed.payload, reqs, parsed.nonce, parsed.payer, function (sok, tx, pending, reason) { resolve({ ok: sok, tx: tx, pending: pending, reason: reason }); }, null); });
+      if (!s.ok) {
+        if (s.pending) return json(402, { x402Version: 2, error: 'payment settlement is pending confirmation. Do not sign a new payment: retry this exact request with the SAME payment header to redeem it once settled.', resource: { url: resourceUrl, description: description, mimeType: 'application/json' }, accepts: [] });
+        return terms('payment settlement failed' + (s.reason ? ': ' + s.reason : ''));
+      }
+      remember(parsed.nonce, { status: 'owed', payer: parsed.payer, tx: s.tx, network: reqs.network });
+      log('PAID ' + (lane.assets()[reqs.extra && reqs.extra.name] || {}).symbol + ' tx ' + (s.tx || '') + ' payer ' + parsed.payer);
+      return await serve(parsed.nonce, parsed.payer, s.tx, reqs.network, prompt);
+    } finally { delete inflight[parsed.nonce]; }
   }
 
   return { handle: handle, get state() { return lane.isReady() ? 'live' : 'dormant'; }, _test: { promptFrom: promptFrom, reqsFor: reqsFor, signedTermsMatch: signedTermsMatch, settled: settled } };

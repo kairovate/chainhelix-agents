@@ -106,7 +106,7 @@ export function lpRange(params: Record<string, unknown>): Record<string, unknown
     // fix 2026-09-03 H35: the guard is OR and the body needs all three, so sending only
     // ageDays failed with "position.feesEarnedUsd must be a finite number", naming a field
     // the buyer never sent, for an optional block they may not have meant to open. Name
-    // every field that is actually missing, once.
+    // every field that is missing, once.
     const missing = ([["feesEarnedUsd", fees], ["positionValueUsd", val], ["ageDays", age]] as const)
       .filter(([, v]) => v === undefined)
       .map(([k]) => `position.${k}`);

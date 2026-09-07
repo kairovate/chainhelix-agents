@@ -1,9 +1,17 @@
-// x402multi/b402.cjs: Binance B402 settlement lane for the four agents (BSC mainnet), 2026-09-05.
-// Ported from the ChainHelix MCP's lane (mcp/b402.js, live since 2026-08-12) so the agents' pay-per-call rail takes the
-// SAME assets the MCP takes: USDT, USDC, USD1 and U on BNB Smart Chain. Differences from the MCP copy: credentials come
-// from the agent's env only (the installed B402_* lines), the private key may arrive base64 in B402_PRIVATE_KEY_B64,
-// payTo is pinned to the official payment wallet by constant (the agents cannot read the operator allowlist file),
-// the lane is on whenever credentials are present, and the state directory is passed in. Everything else is the MCP's.
+// x402multi/b402.cjs: THE ONE Binance B402 settlement lane (BSC mainnet) for both products, 2026-09-07 (build plan B1).
+// Until 2026-09-07 the ChainHelix MCP ran mcp/b402.js (live since 2026-08-12) and the four agents ran this port of it;
+// the two had already drifted in 112 lines. Now this file is the only copy: the MCP's mcp/b402.js is a one-line
+// re-export of it, and each agent's vendor/x402multi/b402.cjs is the same re-export. Everything product-specific is an
+// init option, nothing is a fork:
+//   enabled          the caller's switch (MCP: B402_ENABLED=1; agents: X402_MULTI not 0, the default)
+//   dataDir          pending queue and settle ledger live here (MCP: its own data directory; agents: .studio/x402multi/lane)
+//   payTo            must equal OFFICIAL_PAYTO always; with allowlistFile it must also equal that file's x402_payto_evm
+//   credentialsFile  optional fallback for B402_CLIENT_ID / B402_ACCESS_TOKEN when the env carries neither (MCP)
+//   privateKeyFile   optional default path for the signing key when neither B402_PRIVATE_KEY_B64 nor B402_PRIVATE_KEY is set
+//   rearmMs          how often a dark lane re-asks /supported (default 5 minutes)
+//   logPrefix        the log line prefix ('[mcp] b402: ' or '[x402multi] b402: ')
+// Tests: x402multi/test.cjs (this lane against a stub facilitator, the seller, the redemption store) and
+// mcp/tests/b402_test.js (the lane's money paths). Both must pass before either product restarts.
 // Operator go: "can we start building that and review/audit/wire/harden".
 // x402-v2-conformant facilitator behind Binance's Connect ("Tesla") gateway.
 // Auth scheme is NOT in the b402 docs, derived from the Connect Prime guideline
@@ -43,7 +51,11 @@ var st = {
   dataDir: null,               // set by init(opts.dataDir)
   pending: [],         // [{nonce, payer, payload, reqs, firstAt, tries}]
   onLateSettle: null,
-  ready: false
+  ready: false,
+  rearmMs: 300e3,              // init(opts.rearmMs)
+  logPrefix: '[x402multi] b402: ', // init(opts.logPrefix)
+  proxyUrl: null,              // sweep 2026-09-07 (merchant credentials, one root-only copy): when set, every facilitator
+  proxyToken: null             // call goes unsigned to the loopback proxy, which holds the credentials and signs
 };
 
 // M128 claim [56] (2026-09-01): the paragraph that stood here was an older copy of the one below and said "both are
@@ -56,7 +68,7 @@ var st = {
 // 6-decimal assumption would misprice by 1e12). `domain` is present only where the token
 // implements its own EIP-712 (eip3009 path) and is PINNED from the token's on-chain
 // DOMAIN_SEPARATOR (reproduce with tests/verify_domains.js) so we advertise the domain
-// the token actually validates even if the facilitator drifts. USDC/USDT have no token
+// the token validates even if the facilitator drifts. USDC/USDT have no token
 // domain, they move via the Permit2 contract's own domain, so they carry no `domain`
 // and are reachable only through permit2-exact.
 var BSC_ASSETS = {
@@ -67,20 +79,33 @@ var BSC_ASSETS = {
 };
 
 var OFFICIAL_PAYTO = '0xD4Fa54a346A7788BBc32c2229008b4305Ab7E3fE'; // payout-address integrity: the one wallet customer money may go to
-function log(m) { console.log('[x402multi] b402: ' + m); }
-function warn(m) { console.error('[x402multi] b402: ' + m); }
+function log(m) { console.log(st.logPrefix + m); }
+function warn(m) { console.error(st.logPrefix + m); }
 
 // ---------- credentials ----------
-function loadCreds(env) {
+// env first; then, only when the caller names one, a credentials file with `clientId: ...` and `accessToken: ...`
+// lines (the MCP names its root-only credentials file). The agents name no file, so for them the env is the only source.
+function loadCreds(env, credentialsFile) {
   var id = (env.B402_CLIENT_ID || '').trim();
   var tok = (env.B402_ACCESS_TOKEN || '').trim();
-  if (!id || !tok) throw new Error('B402_CLIENT_ID/B402_ACCESS_TOKEN not set in the agent env');
+  if ((!id || !tok) && credentialsFile) {
+    var txt = fs.readFileSync(credentialsFile, 'utf8');
+    txt.split('\n').forEach(function (line) {
+      var m = line.match(/^(clientId|accessToken):\s*(\S+)/);
+      if (m && m[1] === 'clientId' && !id) id = m[2];
+      if (m && m[1] === 'accessToken' && !tok) tok = m[2];
+    });
+  }
+  if (!id || !tok) throw new Error('B402_CLIENT_ID/B402_ACCESS_TOKEN not set' + (credentialsFile ? ' (env or ' + credentialsFile + ')' : ' in the env'));
   st.clientId = id; st.accessToken = tok;
 }
-function loadKey(env) {
+// base64 env, then a path in the env, then the caller's default path (the MCP's registered key file). The key must be
+// the pair Binance registered for the merchant; any other key gets 403 "Signature invalid".
+function loadKey(env, privateKeyFile) {
   if (env.B402_PRIVATE_KEY_B64) return Buffer.from(String(env.B402_PRIVATE_KEY_B64).trim(), 'base64').toString('utf8');
   if (env.B402_PRIVATE_KEY) return fs.readFileSync(env.B402_PRIVATE_KEY, 'utf8');
-  throw new Error('B402_PRIVATE_KEY_B64 (or B402_PRIVATE_KEY path) not set in the agent env');
+  if (privateKeyFile) return fs.readFileSync(privateKeyFile, 'utf8');
+  throw new Error('B402_PRIVATE_KEY_B64 (or B402_PRIVATE_KEY path) not set in the env');
 }
 
 // ---------- signed transport ----------
@@ -99,20 +124,37 @@ function request(pathName, bodyObj, cb) { // cb(err, json)
   // Kill switch CHX_B402_SETTLE_LATCH=0.
   if (_sw('CHX_B402_SETTLE_LATCH')) { var _rawCb = cb, _done = false; cb = function () { if (_done) return; _done = true; _rawCb.apply(null, arguments); }; }
   var bodyStr = JSON.stringify(bodyObj || {});
+  var rq;
+  if (st.proxyUrl) {
+    // proxy mode (2026-09-07): the agents hold no merchant credential; the root-only proxy on loopback signs and
+    // forwards, enforcing payTo and network itself. The proxy answers with the facilitator's status and JSON body.
+    var pu = new URL(st.proxyUrl.replace(/\/$/, '') + pathName);
+    rq = http.request({ hostname: pu.hostname, port: pu.port || 80, path: pu.pathname, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr), 'X-B402-Proxy-Token': st.proxyToken || '' }, timeout: 50000 }, onResponse);
+    rq.on('error', function (e) { cb(e); });
+    rq.on('timeout', function () { rq.destroy(); cb(new Error('b402 proxy timeout')); });
+    rq.end(bodyStr);
+    return;
+  }
   var ts = String(Date.now());
   var sig;
   try { sig = sign(bodyStr, ts); } catch (e) { return cb(new Error('signing failed: ' + e.message)); }
   var u = new URL(st.baseUrl + pathName);
   if (u.protocol !== 'https:') return cb(new Error('b402 base URL must be https')); // token+sig never travel plaintext
-  var rq = https.request({ hostname: u.hostname, port: u.port || undefined, path: u.pathname, method: 'POST',
+  rq = https.request({ hostname: u.hostname, port: u.port || undefined, path: u.pathname, method: 'POST',
     headers: {
       'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr),
       'X-Tesla-ClientId': st.clientId, 'X-Tesla-SignAccessToken': st.accessToken,
       'X-Tesla-Timestamp': ts, 'X-Tesla-Signature': sig
     }, timeout: 45000 }, // same budget as the Base lane; their sync settle window is ~20s
-    function (rs) {
-      var d = '';
-      rs.on('data', function (c) { d += c; });
+    onResponse);
+  rq.on('error', function (e) { cb(e); });
+  rq.on('timeout', function () { rq.destroy(); cb(new Error('b402 timeout')); });
+  rq.end(bodyStr);
+  function onResponse(rs) {
+      var d = '', size = 0;
+      // sweep 2026-09-07 (S3): the body was read without a cap; 1 MB is far above any facilitator answer
+      rs.on('data', function (c) { size += c.length; if (size > 1048576) { rq.destroy(); return cb(new Error('b402 response too large')); } d += c; });
       rs.on('end', function () {
         // 2026-08-20 (operator go): keep status/headers/raw alongside the parsed
         // JSON, the 08-15 invalid_transaction_state failures could not be
@@ -131,11 +173,18 @@ function request(pathName, bodyObj, cb) { // cb(err, json)
         if (j.data && typeof j.code !== 'undefined') j = j.data;
         cb(null, j, rs.statusCode, meta);
       });
-    });
-  rq.on('error', function (e) { cb(e); });
-  rq.on('timeout', function () { rq.destroy(); cb(new Error('b402 timeout')); });
-  rq.end(bodyStr);
+  }
 }
+var http = require('http');
+// the credentials, the key and the base url only (no probe, no poller): what the proxy needs to sign and forward
+function configureTransport(env, opts) {
+  opts = opts || {};
+  st.baseUrl = (env.B402_BASE_URL || st.baseUrl).replace(/\/$/, '');
+  loadCreds(env, opts.credentialsFile);
+  st.privateKey = loadKey(env, opts.privateKeyFile);
+  return { baseUrl: st.baseUrl, clientId: st.clientId };
+}
+function loopbackUrl(u) { try { var x = new URL(u); return x.protocol === 'http:' && (x.hostname === '127.0.0.1' || x.hostname === 'localhost' || x.hostname === '[::1]'); } catch (e) { return false; } }
 
 // ---------- pending-settle persistence ----------
 function pendingFile() { return st.dataDir + '/pending.json'; }
@@ -154,7 +203,7 @@ function ledger(row) {
 // Pull any request/trace correlation IDs out of gateway response headers so
 // failed settles can be matched to Binance's production logs (their 08-20 ask;
 // we had nothing to give them for the 08-15 failures). Name-based match keeps
-// this robust to whatever header their gateway actually uses.
+// this robust to whatever header their gateway uses.
 function traceIds(meta) {
   var out = null;
   var h = meta && meta.headers;
@@ -319,27 +368,49 @@ function acceptsFor(priceUsd) { return st.ready ? buildAccepts(st.kinds, priceUs
 
 // ---------- init ----------
 function init(env, opts) {
-  if (String(env.X402_MULTI || '1') === '0') { log('disabled (X402_MULTI=0)'); return; }
-  st.dataDir = (opts && opts.dataDir) || st.dataDir;
+  opts = opts || {};
+  if (opts.logPrefix) st.logPrefix = opts.logPrefix;
+  if (opts.rearmMs > 0) st.rearmMs = opts.rearmMs;
+  var on = (typeof opts.enabled === 'boolean') ? opts.enabled : String(env.X402_MULTI || '1') !== '0';
+  if (!on) { log('disabled by the caller\'s switch, lane dark'); return; }
+  st.dataDir = opts.dataDir || st.dataDir;
   if (!st.dataDir) { warn('DISABLED: no dataDir'); return; }
   st.baseUrl = (env.B402_BASE_URL || st.baseUrl).replace(/\/$/, '');
   st.network = env.B402_NETWORK_CAIP2 || st.network;
-  st.payTo = env.B402_PAY_TO || (opts && opts.payTo);
-  st.onLateSettle = opts && opts.onLateSettle;
+  st.payTo = env.B402_PAY_TO || opts.payTo;
+  st.onLateSettle = opts.onLateSettle;
   st.env = env;
   // MCP fix 2026-09-01 M130 claim [55]: payTo was never checked against the pinned allowlist that exists for exactly
   // this ("every address that receives customer money", lib/billing/_pinned_address.js). The rail stays dark unless
-  // payTo equals config/payout_allowlist.json x402_payto_evm. Kill switch CHX_B402_PAYTO_PIN=0.
+  // payTo equals OFFICIAL_PAYTO, and, when the caller names an allowlist file, also that file's x402_payto_evm (the
+  // MCP passes config/payout_allowlist.json; the agents cannot read it and rely on the constant). Kill switch
+  // CHX_B402_PAYTO_PIN=0.
   if (_sw('CHX_B402_PAYTO_PIN')) {
     if (String(st.payTo || '').toLowerCase() !== OFFICIAL_PAYTO.toLowerCase()) {
       warn('DISABLED: payTo ' + st.payTo + ' is not the official payment wallet ' + OFFICIAL_PAYTO); st.payTo = null; return;
     }
+    if (opts.allowlistFile) {
+      var _pin = null;
+      try { _pin = JSON.parse(fs.readFileSync(opts.allowlistFile, 'utf8')).x402_payto_evm; } catch (e) {}
+      if (!_pin || String(_pin).toLowerCase() !== String(st.payTo).toLowerCase()) {
+        warn('DISABLED: payTo ' + st.payTo + ' is not the pinned x402_payto_evm (' + _pin + ') in ' + opts.allowlistFile); st.payTo = null; return;
+      }
+    }
   }
-  try {
-    loadCreds(env);
-    // The key must be the pair Binance registered for this merchant; any other key gets 403 "Signature invalid".
-    st.privateKey = loadKey(env);
-  } catch (e) { warn('DISABLED, credentials/key load failed: ' + e.message); return; }
+  st.proxyUrl = env.B402_PROXY_URL || opts.proxyUrl || null; st.proxyToken = env.B402_PROXY_TOKEN || opts.proxyToken || null;
+  if (st.proxyUrl) {
+    // one merchant credential on the host (sweep 2026-09-07): this process signs nothing and holds nothing; the proxy
+    // is reached over loopback only, a token in the clear on any other address would be a credential leak
+    if (!loopbackUrl(st.proxyUrl)) { warn('DISABLED: B402_PROXY_URL must be http on 127.0.0.1 or localhost'); st.proxyUrl = null; return; }
+    if (!st.proxyToken) { warn('DISABLED: B402_PROXY_TOKEN not set'); st.proxyUrl = null; return; }
+    st.clientId = null; st.accessToken = null; st.privateKey = null;
+    log('proxy mode: facilitator calls go to ' + st.proxyUrl + ', no merchant credential in this process');
+  } else {
+    try {
+      loadCreds(env, opts.credentialsFile);
+      st.privateKey = loadKey(env, opts.privateKeyFile);
+    } catch (e) { warn('DISABLED, credentials/key load failed: ' + e.message); return; }
+  }
   if (!st.payTo) { warn('DISABLED, no payTo address'); return; }
   try { fs.mkdirSync(st.dataDir, { recursive: true }); } catch (e) {}
   try { st.pending = JSON.parse(fs.readFileSync(pendingFile(), 'utf8')) || []; } catch (e) { st.pending = []; }
@@ -356,7 +427,7 @@ function init(env, opts) {
     var kinds = j && (j.kinds || (j.data && j.data.kinds));
     if (e || !Array.isArray(kinds)) {
       warn('DISABLED, /supported failed (' + (e ? e.message : 'HTTP ' + status + ' ' + JSON.stringify(j).slice(0, 120)) + '). Expected until Binance registers our public key; lane stays dark, no restart needed to retry: it re-checks hourly.');
-      setTimeout(function () { init(env, opts); }, 300e3).unref(); // re-arm every 5 minutes until /supported answers
+      setTimeout(function () { init(env, opts); }, st.rearmMs).unref(); // re-arm until /supported answers (opts.rearmMs, default 5 minutes)
       return;
     }
     st.kinds = kinds;
@@ -378,5 +449,8 @@ module.exports = {
   network: function () { return st.network; },
   OFFICIAL_PAYTO: OFFICIAL_PAYTO,
   assets: function () { return BSC_ASSETS; },
-  _test: { sign: sign, buildAccepts: buildAccepts, toolAmountAtomic: toolAmountAtomic, st: st, loadCreds: loadCreds, settleBody: settleBody, poll: poll, request: request } // poll/request exposed 2026-09-01 for the M98/M102 harness
+  configureTransport: configureTransport, // proxy server: credentials + key + base url, nothing else
+  rawRequest: request,                    // proxy server: one signed facilitator call, cb(err, json, status, meta)
+  loopbackUrl: loopbackUrl,
+  _test: { sign: sign, buildAccepts: buildAccepts, toolAmountAtomic: toolAmountAtomic, st: st, loadCreds: loadCreds, loadKey: loadKey, settleBody: settleBody, poll: poll, request: request } // poll/request exposed 2026-09-01 for the M98/M102 harness
 };

@@ -90,7 +90,7 @@ export class DeliveryTimeoutError extends Error {}
  * was measured: with a 1 s pre-verify deadline against a 2.5 s verify, the ack
  * returned after 1002 ms and the verify call still ran to completion 3 s later.
  * The leaked RPC is therefore inherent to the layer below, not a missing argument,
- * and what actually bounds the amplification is the single-flight sweep gate
+ * and what bounds the amplification is the single-flight sweep gate
  * (AGENT_SWEEP_SINGLE_FLIGHT), not this deadline.
  */
 async function withTimeout<T>(

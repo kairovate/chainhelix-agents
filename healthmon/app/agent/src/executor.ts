@@ -210,7 +210,7 @@ function inbound(context: RequestContext): Record<string, unknown> {
   // fix 2026-09-03 H164: A2A permits several data parts and this read took the first
   // one only, so a buyer that put the skill envelope in the second part had it ignored
   // and got the unknown-skill rejection with the envelope sitting one part away. Take
-  // the first data part that actually carries a skill; fall back to the old
+  // the first data part that carries a skill; fall back to the old
   // first-part reading when none does, so a caller that follows the one-envelope
   // contract sees no change. AGENT_MULTI_DATAPART=0 restores the first-part-only read.
   if (process.env.AGENT_MULTI_DATAPART !== "0") {

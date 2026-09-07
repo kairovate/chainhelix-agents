@@ -105,7 +105,7 @@ export function grid(params: Record<string, unknown>): Record<string, unknown> {
     levelsPerSide: levels,
     perLevelUsd: round(perLevelUsd),
     budgetUsd: budget,
-    // fix 2026-09-03 H171: what the ladder actually spends, at or under budgetUsd.
+    // fix 2026-09-03 H171: what the ladder spends, at or under budgetUsd.
     allocatedUsd: round(round(perLevelUsd) * levels * 2),
     buys,
     sells,
