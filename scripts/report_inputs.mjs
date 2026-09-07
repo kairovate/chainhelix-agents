@@ -20,7 +20,7 @@ const [bnb, btc, eth, klines] = await Promise.all([
 // the 3 most-touched bands become walls. fix 2026-09-03 H52: the price is the arithmetic MEAN of the
 // touch prices in the band (v.sum / v.n below), not the band's midpoint; the comment said midpoint and a
 // judge reproducing the wall map from it would get different prices. The mean is what the code does and
-// what it should do: it puts the wall where the touches actually clustered.
+// what it should do: it puts the wall where the touches clustered.
 const mark = parseFloat(bnb.price);
 const touchesByBand = new Map();
 for (const k of klines) {

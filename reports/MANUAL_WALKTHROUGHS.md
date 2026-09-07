@@ -8,7 +8,7 @@ the answers.
 ## Rules for every task
 - Start a stopwatch when you open the task section, stop it when your output
   file is saved. The reading is the task's manual time, learning included.
-- Screen-record if convenient; otherwise write down start and
+- Screen-record if convenient (OBS is set up); otherwise write down start and
   end times.
 - One sitting per task. Breaks pause the stopwatch.
 - Do not open the agent deliverable URLs or reports/out-*.json before you

@@ -135,7 +135,7 @@ if (kind === "grid") {
   // plan with one sell and no buys (or one buy and no sells) passed. rebalance.ts states the contract:
   // "residualUsd reports the difference (positive = the buys need that much cash) ... The plan is
   // self-funding only when residualUsd is 0". So the sums must net to zero, unless the plan declares the
-  // imbalance in residualUsd, in which case the declared figure must match what the trades actually do.
+  // imbalance in residualUsd, in which case the declared figure must match what the trades do.
   const sideSum = (side) => got.filter((g) => g.side === side).reduce((s, g) => s + Number(g.usd ?? 0), 0);
   const residual = sideSum("buy") - sideSum("sell");
   const tol = Math.max(total * 0.001, 0.01);
