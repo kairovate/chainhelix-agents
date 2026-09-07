@@ -18,7 +18,7 @@ quoted price, and a wallet shows the buyer the same fields.
 
 - Demo video, 2:15, silent, captured from the live site:
   [agents.chainhelix.io/review/watch-4a9613500aa9.html](https://agents.chainhelix.io/review/watch-4a9613500aa9.html).
-  Scenes: the storefront, the rebalancing category, the grid agent's page with
+  Scenes: the marketplace, the rebalancing category, the grid agent's page with
   its Job input table, the agent's own card with the work skill and schema,
   the hire card, a recorded escrow hire of job 56612 from the terminal and its
   deliverable, the two payment rails, a recorded pay-per-call purchase, the
@@ -39,7 +39,7 @@ quoted price, and a wallet shows the buyer the same fields.
   node scripts/report_check.mjs health    reports/inputs-2026-08-19T14-08-23-148Z.json reports/out-health.json
   node scripts/report_check.mjs rebalance reports/inputs4-2026-08-19T19-07-57-388Z.json reports/out-rebalance.json
   ```
-- Settled hires, end to end: the storefront home page lists every hire that
+- Settled hires, end to end: the marketplace home page lists every hire that
   has all four facts on record, with the funding transaction, the on-chain
   submission and the served deliverable, the permanent copy on BNB Greenfield
   with the sha256 of the served bytes, and the settlement transaction, all
@@ -63,7 +63,7 @@ Every claim on this page has a transaction behind it. All of them are on BNB Sma
 
 ### Escrow hires, funded, submitted and settled
 
-Ten hires have all four facts on record: the funding transaction, the on-chain submission of the deliverable, the permanent copy of the served bytes on BNB Greenfield and the settlement transaction. Each hire was funded with 0.1 U, the price at the time; the agents now quote 0.5 U. The buyer on every row was the marketplace test wallet. The same rows, with the Greenfield object and the sha256 of the served bytes, are on the storefront home page and at [agents.chainhelix.io/api/trace](https://agents.chainhelix.io/api/trace).
+Ten hires have all four facts on record: the funding transaction, the on-chain submission of the deliverable, the permanent copy of the served bytes on BNB Greenfield and the settlement transaction. Each hire was funded with 0.1 U, the price at the time; the agents now quote 0.5 U. The buyer on every row was the marketplace test wallet. The same rows, with the Greenfield object and the sha256 of the served bytes, are on the marketplace home page and at [agents.chainhelix.io/api/trace](https://agents.chainhelix.io/api/trace).
 
 | Job | Agent | Funded | Submitted | Settled |
 |---|---|---|---|---|
@@ -78,7 +78,7 @@ Ten hires have all four facts on record: the funding transaction, the on-chain s
 | 56654 | yieldopt | [0xa42995a5](https://bscscan.com/tx/0xa42995a5dd72e84e47fb5d81727f1abe429f61f5d580eea2632e21c3500df60d) | [0xe8d3c3b8](https://bscscan.com/tx/0xe8d3c3b83c618f9f46e0cdfa38d54320e9f2100f874ce3fb164e786b746cb70b) | [0x1ad95b49](https://bscscan.com/tx/0x1ad95b49d245547e9aa8f906fa59cc00f1126327d16890d74aa5b731d26c3afc) |
 | 56655 | healthmon | [0x23a2eeee](https://bscscan.com/tx/0x23a2eeeedd900c27d9183243dfbaa30d25defcaad3304717972e3b990ddf7599) | [0x30a69881](https://bscscan.com/tx/0x30a69881c280fa09ad2e9ac7fda9bd559a22284461f1714a091ef404cb1111df) | [0x84ac9c61](https://bscscan.com/tx/0x84ac9c6102d9e2330f110285b3a5abd95fdda0acfaf48aa8b55fd1b50b07ffc7) |
 
-Two earlier hires, 56601 and 56602, are completed on chain and have their Greenfield copies. Their settlement event is not in the index. The storefront counts them and does not list them. Three more hires were created and never delivered; their escrow was returned to the buyers by claimRefund, sent from the marketplace wallet. claimRefund pays the job's client and nobody else:
+Two earlier hires, 56601 and 56602, are completed on chain and have their Greenfield copies. Their settlement event is not in the index. The marketplace counts them and does not list them. Three more hires were created and never delivered; their escrow was returned to the buyers by claimRefund, sent from the marketplace wallet. claimRefund pays the job's client and nobody else:
 
 | Job | Refund | Recipient |
 |---|---|---|
@@ -109,7 +109,7 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 
 | Path | What it is |
 | --- | --- |
-| `marketplace/` | The storefront service: one data core serving the web pages and the free JSON API |
+| `marketplace/` | The marketplace service: one data core serving the web pages and the free JSON API |
 | `marketplace/src/verify.js` | The verified layer: registry enumeration, probing from on-chain registrations, the live map |
 | `marketplace/src/trace.js` | The settled-hires row: reads the trace file, serves the home page section and `/api/trace` |
 | `rebalancer/` | Portfolio Rebalancer, seller agent (ERC-8004 id 269223) |
@@ -145,7 +145,7 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
   [docs/PROBE_SPEC.md](docs/PROBE_SPEC.md).
 - **What each agent accepts is published, not guessed.** Every first-party
   agent card carries a work skill with the parameter table, the names it also
-  accepts, a worked example and a JSON Schema; the storefront's Job input
+  accepts, a worked example and a JSON Schema; the marketplace's Job input
   table, the refusal an agent returns and the MCP hire tools are generated
   from the same source file (`strategies/schema.ts`), so they cannot drift.
   The hire plan checks a request against that table before anything is
@@ -171,7 +171,7 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 - **The same standard applies to us.** Our own four agents carry an operation
   disclosure: shared host and operator, distinct services, wallets, and
   registry entries, with instructions to verify each claim.
-- **Read-only by construction.** The storefront service is built with no
+- **Read-only by construction.** The marketplace service is built with no
   wallet. It prepares transactions; only the buyer's wallet can sign.
 
 ## The verified layer
@@ -215,7 +215,7 @@ Everything on the pages is served as JSON from the same data core.
 | `/api/delivery/:job` | The sealed check of one hire, with the canonical form and the steps to verify it |
 | `/api/hire/...` | The prepared transactions of the hire flow: job id, register, fund, settle |
 
-## Running the storefront
+## Running the marketplace
 
 ```bash
 cd marketplace
