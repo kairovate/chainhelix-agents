@@ -144,7 +144,7 @@ export const WORK_SCHEMAS: Record<WorkSchema["category"], WorkSchema> = {
 /**
  * Apply the declared aliases: a buyer's name is renamed to ours ONLY when our name is absent, never over it.
  * Grid also derives spanPct from lower/upper when spanPct is absent. Every alias here is printed on the card,
- * in the storefront table and in the refusal, so this is published acceptance, not guessing.
+ * in the marketplace table and in the refusal, so this is published acceptance, not guessing.
  * STRATEGY_INPUT_ALIASES=0 restores the exact-name behaviour.
  */
 export function applyAliases(category: WorkSchema["category"], p: Record<string, unknown>): { params: Record<string, unknown>; applied: string[] } {
@@ -205,7 +205,7 @@ export function inputSchema(category: WorkSchema["category"]): Record<string, un
   // sweep 2026-09-05: health answers one of two questions (lending: collateral, debt, prices; LP range: position).
   // The flat required list said "collateral, debt, prices" and contradicted the skill text and the dispatcher,
   // which serve a position-only request. The schema now states the two shapes as anyOf, required at the top is
-  // empty for health, and the storefront table and refusal hint keep their wording (position is documented there).
+  // empty for health, and the marketplace table and refusal hint keep their wording (position is documented there).
   if (s.category === "health") {
     return {
       $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -252,9 +252,9 @@ function jsonType(t: string): Record<string, unknown> {
 }
 
 /**
- * The marketplace storefront's "Job input" table (marketplace/catalog.json agents[].inputSchema,
+ * The marketplace's "Job input" table (marketplace/catalog.json agents[].inputSchema,
  * rendered by marketplace/src/pages.js). Generated from here by strategies/emit_catalog_schema.ts so
- * the storefront, the agent card and the refusal cannot say three different things.
+ * the marketplace, the agent card and the refusal cannot say three different things.
  */
 export function catalogInputSchema(category: WorkSchema["category"]): { note: string; required: Record<string, string>; optional: Record<string, string>; aliases: Record<string, string[]> } {
   const s = WORK_SCHEMAS[category];

@@ -276,7 +276,7 @@ delete process.env.STRATEGY_STRICT_INPUT;
     ok(`schema ${cat}: the example satisfies the JSON Schema's required list`, jsRequired.every((n) => n in sch.example));
     if (cat === "health") ok("schema health: the JSON Schema states the LP shape (position) as the second anyOf branch and requires nothing at the top", js.required.length === 0 && JSON.stringify((js.anyOf ?? [])[1]) === JSON.stringify({ required: ["position"] }));
   }
-  // the storefront's Job input table is generated from the same source; a stale catalog.json fails here.
+  // the marketplace's Job input table is generated from the same source; a stale catalog.json fails here.
   // Only where the catalog exists next to this tree (the vendored copies inside the agents have none).
   const catalogPath = new URL("../marketplace/catalog.json", import.meta.url).pathname;
   if (existsSync(catalogPath)) {

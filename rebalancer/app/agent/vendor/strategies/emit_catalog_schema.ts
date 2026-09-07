@@ -9,7 +9,7 @@ import { WORK_SCHEMAS, catalogInputSchema, inputSchema, exampleTaskDescription }
 /**
  * 2026-09-05 (build B3, the MCP bridge): marketplace/work_schemas.json, one entry per first-party agent with the
  * JSON Schema and the example, read by the ChainHelix MCP to publish hire_<agent> tools whose inputSchema IS this
- * schema. Same source as the card, the refusal and the storefront table.
+ * schema. Same source as the card, the refusal and the marketplace table.
  */
 export function renderWorkSchemas(catalogJson: string): string {
   const cat = JSON.parse(catalogJson);
