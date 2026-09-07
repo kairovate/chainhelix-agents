@@ -114,7 +114,7 @@ function createRpc(cfg) {
     rpcOn: rpcOn, rpcRead: rpcRead, rawRead: rawRead, callbackRead: callbackRead, viemTransports: viemTransports, ethersRead: ethersRead, provider: function (ethers, chainId) { return provider(ethers, primary, chainId); } };
 }
 
-// the free public fallbacks the products use, one per chain, no keys (operator 2026-09-06: no paid tiers until revenue)
+// the free public fallbacks the products use, one per chain, no keys (standing rule since 2026-09-06: no paid tiers until revenue)
 var DEFAULT_FALLBACK = {
   'eip155:56': 'https://bsc-rpc.publicnode.com',           // BNB Smart Chain; primary is usually bsc-dataseed.binance.org
   'eip155:204': 'https://opbnb-rpc.publicnode.com',        // opBNB; primary opbnb-mainnet-rpc.bnbchain.org

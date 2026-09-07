@@ -113,7 +113,7 @@ ${footer()}
 </html>`;
 }
 
-// 2026-09-07 (operator: the agentic pages must be connected, not spread everywhere): the same strip on every
+// 2026-09-07 (rule: the agent pages are connected, not spread everywhere): the same strip on every
 // ChainHelix surface for agents, in the same order and words. The machine home and the main site carry the same line.
 export function sitesStrip(here) {
   const items = [["main", "https://chainhelix.io", "ChainHelix"], ["machines", "https://mcp.chainhelix.io", "ChainHelix for machines"], ["market", "https://agents.chainhelix.io", "Agent Market"], ["delivery", "https://agents.chainhelix.io/d", "Delivery checks"]];
