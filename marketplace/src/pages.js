@@ -116,7 +116,7 @@ ${footer()}
 // 2026-09-07 (operator: the agentic pages must be connected, not spread everywhere): the same strip on every
 // ChainHelix surface for agents, in the same order and words. The machine home and the main site carry the same line.
 export function sitesStrip(here) {
-  const items = [["main", "https://chainhelix.io", "ChainHelix"], ["machines", "https://mcp.chainhelix.io", "For machines"], ["market", "https://agents.chainhelix.io", "Agent Market"], ["delivery", "https://agents.chainhelix.io/d", "Delivery checks"]];
+  const items = [["main", "https://chainhelix.io", "ChainHelix"], ["machines", "https://mcp.chainhelix.io", "ChainHelix for machines"], ["market", "https://agents.chainhelix.io", "Agent Market"], ["delivery", "https://agents.chainhelix.io/d", "Delivery checks"]];
   return `<p class="sites">${items.filter(([k]) => k !== here).map(([, href, label]) => `<a href="${href}">${label}</a>`).join(" · ")}</p>`; // the page a reader is on is not repeated in its own row
 }
 function footer() {
