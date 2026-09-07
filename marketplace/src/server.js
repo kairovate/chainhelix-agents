@@ -22,6 +22,8 @@ import { renderHome, renderCategory, renderAgent, renderHire, HIRE_SCRIPT, CATEG
 import { startJobStats } from "./jobstats.js";
 import { verifyNow, liveMap, recordFromState } from "./verify.js"; // 2026-08-24 ChainHelix Verified live layer
 import { traceView, traceRows, loadTrace } from "./trace.js"; // 2026-09-03 settled hires, end to end (read-only)
+import { deliveryFor, deliveryList } from "./delivery.js"; // 2026-09-07 A4: sealed delivery checks (read-only)
+import { renderDelivery, renderDeliveryList } from "./pages.js";
 import { paidCallsView, paidCallRows, loadPaidCalls } from "./paid_calls.js"; // 2026-09-05 pay-per-call purchases on record (read-only)
 
 startJobStats();
@@ -319,6 +321,20 @@ app.get("/api/verify/:id", async (req, reply) => {
 // 2026-09-03: settled hires with all four facts on record (funding tx, on-chain submission + served deliverable,
 // Greenfield copy, settlement tx). Read from data/job_trace.json, written only by scripts/build_job_trace.mjs.
 app.get("/api/trace", async () => traceView());
+// 2026-09-07 (A4): sealed delivery checks, the record the MCP's verified_delivery writes; this server only reads it
+app.get("/api/delivery", async (req) => deliveryList(req.query && req.query.limit));
+app.get("/api/delivery/:job", async (req, reply) => {
+  if (!/^\d{1,12}$/.test(req.params.job)) return reply.code(400).send({ error: "numeric job id required" });
+  const v = deliveryFor(req.params.job);
+  return v ? v : reply.code(404).send({ error: "no delivery check on record for this hire", how: "an agent buys one through the ChainHelix MCP tool verified_delivery" });
+});
+app.get("/d", async (req, reply) => sendPage(reply, renderDeliveryList(deliveryList(100))));
+app.get("/d/:job", async (req, reply) => {
+  if (!/^\d{1,12}$/.test(req.params.job)) return reply.code(400).type("text/plain").send("numeric job id required");
+  const v = deliveryFor(req.params.job);
+  if (!v) return reply.code(404).type("text/plain").send("no delivery check on record for this hire");
+  sendPage(reply, renderDelivery(v));
+});
 app.get("/api/paid-calls", async () => paidCallsView()); // 2026-09-05
 app.get("/api/jobs/:id", async (req, reply) => {
   const id = req.params.id;
@@ -329,6 +345,8 @@ app.get("/api/jobs/:id", async (req, reply) => {
     // 2026-08-24: permanent copy of the deliverable on BNB Greenfield (written by an out-of-repo mirror,
     // this server only reads the index). Absent = not mirrored yet; the on-chain pointer stays the source of truth.
     job.greenfield = greenfieldCopy(id);
+    const dc = deliveryFor(id); // 2026-09-07 A4
+    job.deliveryCheck = dc ? { verdict: dc.verdict, seq: dc.seq, hash: dc.hash, opbnbTx: dc.seal.tx ? dc.seal.tx.hash : null, page: `/d/${id}`, json: `/api/delivery/${id}` } : null;
     return job;
   } catch (e) {
     req.log.warn({ err: e.message }, "upstream failure"); // detail stays server-side (redteam A6: e.message leaked internal hosts/ports)

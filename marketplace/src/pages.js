@@ -4,6 +4,7 @@
 // live-state claims. Third-party text is untrusted and always escaped.
 import { CATALOG } from "./catalog.js";
 import { BSCSCAN } from "./config.js";
+import { deliveryByJob } from "./delivery.js"; // 2026-09-07 A4: sealed delivery checks, linked from every settled hire
 
 export function esc(s) {
   return String(s ?? "")
@@ -33,6 +34,7 @@ export const CATEGORY_COPY = {
 };
 
 const STYLE = `
+.sites { font-size: .85rem; margin: 0 0 1rem; color: #666; } .sites a { color: inherit; } .sites b { color: #111; }
   :root { --bg:#0e1116; --panel:#161b23; --line:#242c38; --text:#e6ebf2; --muted:#8a94a3;
           --accent:#e8b021; --on:#3ecf6f; --off:#6b7280; }
   * { box-sizing:border-box; margin:0; }
@@ -103,6 +105,7 @@ function page(title, body) {
 </head>
 <body>
 <main>
+${sitesStrip("market")}
 ${body}
 ${footer()}
 </main>
@@ -110,12 +113,18 @@ ${footer()}
 </html>`;
 }
 
+// 2026-09-07 (operator: the agentic pages must be connected, not spread everywhere): the same strip on every
+// ChainHelix surface for agents, in the same order and words. The machine home and the main site carry the same line.
+export function sitesStrip(here) {
+  const items = [["main", "https://chainhelix.io", "ChainHelix"], ["machines", "https://mcp.chainhelix.io", "For machines"], ["market", "https://agents.chainhelix.io", "Agent Market"], ["delivery", "https://agents.chainhelix.io/d", "Delivery checks"]];
+  return `<p class="sites">${items.map(([k, href, label]) => (k === here ? `<b>${label}</b>` : `<a href="${href}">${label}</a>`)).join(" · ")}</p>`;
+}
 function footer() {
   return `<footer>
     <p><strong>The same data as JSON:</strong> every page is served at
       <a href="/api/agents">/api/agents</a>. Job status:
       <code>/api/jobs/&lt;id&gt;</code>. Quotes:
-      <code>/api/agents/&lt;id&gt;/quote</code>.</p>
+      <code>/api/agents/&lt;id&gt;/quote</code>. Sealed delivery checks: <a href="/api/delivery">/api/delivery</a>.</p>
     <p>Registry: <a href="${BSCSCAN}/address/${CATALOG.registry}">${CATALOG.registry}</a>
       on BNB Smart Chain (chain 56).</p>
   </footer>`;
@@ -308,6 +317,7 @@ function short(h) { return h && h.length > 18 ? `${h.slice(0, 10)}...${h.slice(-
 function httpHref(u) { return typeof u === "string" && /^https?:\/\//i.test(u) ? u : null; }
 function traceSection(rows) {
   if (!rows || !rows.length) return "";
+  const checks = deliveryByJob();
   const tr = rows
     .map(
       (r) => `<tr>
@@ -316,6 +326,7 @@ function traceSection(rows) {
         <td><a href="${esc(r.delivered.link)}">submitted on-chain</a> · ${httpHref(r.delivered.url) ? `<a href="${esc(httpHref(r.delivered.url))}">deliverable</a>` : "deliverable"}<br><span class="muted small">${esc(r.delivered.at.slice(0, 16).replace("T", " "))}Z</span></td>
         <td>${httpHref(r.greenfield.url) ? `<a href="${esc(httpHref(r.greenfield.url))}">Greenfield copy</a>` : "Greenfield copy"}<br><span class="muted small">sha256 ${esc(short(r.greenfield.sha256))}</span></td>
         <td><a href="${esc(r.settled.link)}">settled</a><br><span class="muted small">${esc(r.settled.at.slice(0, 16).replace("T", " "))}Z, ${esc(String(r.settled.verdict || "").toLowerCase())}</span></td>
+        <td>${checks[r.job] ? `<a href="/d/${esc(r.job)}">${esc(checks[r.job].claim.verdict)}</a><br><span class="muted small">${checks[r.job].status === "sealed" ? "sealed on opBNB" : "seal pending"}</span>` : `<span class="muted small">none yet</span>`}</td>
       </tr>`
     )
     .join("\n");
@@ -326,7 +337,7 @@ function traceSection(rows) {
       sha256 of the served bytes, and the settlement transaction. Rows marked first-party test wallet were paid
       from our own wallet. As JSON: <a href="/api/trace">/api/trace</a>.</p>
     <table class="schema trace">
-      <thead><tr><th>agent</th><th>hired</th><th>delivered</th><th>permanent copy</th><th>settled</th></tr></thead>
+      <thead><tr><th>agent</th><th>hired</th><th>delivered</th><th>permanent copy</th><th>settled</th><th>delivery check</th></tr></thead>
       <tbody>${tr}</tbody>
     </table>
   </section>`;
@@ -770,4 +781,85 @@ export function renderAgent(d) {
   ${schemaTable(d.inputSchema)}
   ${hireBlock(d)}`
   );
+}
+
+// ---- 2026-09-07 (build plan A4): sealed delivery checks, the human page for what the MCP's verified_delivery sells ----
+function yesNo(v) { return v === true ? "<b class=\"on\">passed</b>" : v === false ? "<b class=\"off\">failed</b>" : "<span class=\"muted\">not checked</span>"; }
+function when(iso) { return iso ? esc(String(iso).slice(0, 19).replace("T", " ")) + "Z" : "unknown"; }
+function link(t) { return t && t.link ? `<a href="${esc(t.link)}">${esc(short(t.hash || t.address))}</a>` : "none"; }
+export function renderDelivery(v) {
+  const verdictCopy = { verified: "The deliverable on record is the one the provider submitted on chain, and every copy matches.", partial: "No check failed, but the on chain pointer was not available to compare when this check ran.", mismatch: "At least one check failed. The rows below say which." };
+  const body = `<p class="crumb"><a href="/">Agent Market</a> / <a href="/d">Delivery checks</a> / job ${esc(v.job)}</p>
+  <header class="top">
+    <h1>Delivery check for hire ${esc(v.job)}</h1>
+    <p class="tag"><span class="badge ${v.verdict === "verified" ? "on" : v.verdict === "mismatch" ? "off" : "unv"}">${esc(v.verdict)}</span> ${esc(verdictCopy[v.verdict] || "")}
+      Checked ${when(new Date(v.checkedAt).toISOString())}. ${v.seal.tx ? `Sealed on opBNB in <a href="${esc(v.seal.tx.link)}">${esc(short(v.seal.tx.hash))}</a>` : "Seal pending, the opBNB transaction lands within about two minutes"}.
+      Claim ${esc(v.seq)}, hash <code>${esc(short(v.hash))}</code>.</p>
+  </header>
+  <section class="block">
+    <h2>The checks</h2>
+    <table class="schema">
+      <tbody>
+        <tr><td>The deliverable bytes match the pointer the provider wrote on chain at submission</td><td>${yesNo(v.checks.pointerMatches)}</td></tr>
+        <tr><td>The permanent copy on BNB Greenfield matches the hash the index recorded</td><td>${yesNo(v.checks.permanentMatchesIndex)}</td></tr>
+        <tr><td>The bytes the provider serves today match the permanent copy</td><td>${yesNo(v.checks.servedMatchesPermanent)}</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="block">
+    <h2>The hire</h2>
+    <table class="schema">
+      <tbody>
+        <tr><td>provider</td><td>${v.provider ? `<a href="${esc(v.provider.link)}">${esc(v.provider.address)}</a>` : "unknown"}</td></tr>
+        <tr><td>buyer</td><td>${v.buyer ? `<a href="${esc(v.buyer.link)}">${esc(v.buyer.address)}</a>` : "unknown"}</td></tr>
+        <tr><td>status on chain</td><td>${esc(v.jobStatus)}</td></tr>
+        <tr><td>funded</td><td>${v.hired ? `${esc(v.hired.amount)} ${esc(v.hired.token)} at ${when(v.hired.at)}, ${link(v.hired.tx)}` : "not on record"}</td></tr>
+        <tr><td>submitted</td><td>${v.onChain && v.onChain.submittedAt ? `${when(v.onChain.submittedAt)}, ${link(v.onChain.submitTx)}` : "not on record"}</td></tr>
+        <tr><td>time from funding to delivery</td><td>${v.deliveredInSeconds != null ? esc(v.deliveredInSeconds) + " seconds" : "not on record"}</td></tr>
+        <tr><td>settled</td><td>${v.settled ? `${esc(String(v.settled.verdict || "").toLowerCase())} at ${when(v.settled.at)}, ${link(v.settled.tx)}` : "not yet"}</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="block">
+    <h2>The bytes</h2>
+    <table class="schema">
+      <tbody>
+        <tr><td>deliverable</td><td>${v.deliverable && v.deliverable.url ? `<a href="${esc(v.deliverable.url)}">served copy</a>` : "no public url"}, ${v.deliverable ? esc(v.deliverable.bytes) + " bytes, hashed from the " + esc(v.deliverable.source) : ""}</td></tr>
+        <tr><td>sha256</td><td><code>${esc(v.deliverable ? v.deliverable.sha256 : "")}</code></td></tr>
+        <tr><td>keccak256</td><td><code>${esc(v.deliverable ? v.deliverable.keccak256 : "")}</code></td></tr>
+        <tr><td>pointer on chain</td><td><code>${esc(v.onChain && v.onChain.pointer ? v.onChain.pointer : "not on record")}</code></td></tr>
+        <tr><td>permanent copy</td><td>${v.permanentCopy ? `${v.permanentCopy.url ? `<a href="${esc(v.permanentCopy.url)}">BNB Greenfield</a>` : "BNB Greenfield"}, index sha256 <code>${esc(short(v.permanentCopy.indexSha256))}</code>` : "none"}</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="block">
+    <h2>Check it yourself</h2>
+    <ol class="steps">
+      <li>Read the claim as JSON at <a href="/api/delivery/${esc(v.job)}">/api/delivery/${esc(v.job)}</a>. The field <code>claim</code> is the statement, <code>hash</code> its sha256.</li>
+      <li>Rebuild the canonical text: the claim with its keys in this order and no whitespace, a missing field as null: ${esc(v.canonicalKeys.join(", "))}. Its sha256 must equal <code>hash</code>.</li>
+      <li>Open the opBNB transaction${v.seal.tx ? ` <a href="${esc(v.seal.tx.link)}">${esc(short(v.seal.tx.hash))}</a>` : ""}. Its data ends with that hash and carries the claim number; the sender${v.seal.key ? ` is <code>${esc(v.seal.key)}</code>,` : ""} the ChainHelix delivery key, which signs nothing else.</li>
+      <li>Fetch the deliverable yourself and hash the bytes. sha256 must equal the value above, keccak256 must equal the pointer on chain.</li>
+    </ol>
+    <p class="muted small">A check like this one is sold by the ChainHelix MCP as the tool verified_delivery, one cent per hire, paid per call on BNB Smart Chain. The free tools delivery_status and delivery_spec return the same record and these rules.</p>
+  </section>`;
+  return page(`Delivery check for hire ${v.job}`, body);
+}
+export function renderDeliveryList(list) {
+  const rows = list.claims.map((v) => `<tr>
+      <td><a href="/d/${esc(v.job)}">job ${esc(v.job)}</a></td>
+      <td><span class="badge ${v.verdict === "verified" ? "on" : v.verdict === "mismatch" ? "off" : "unv"}">${esc(v.verdict)}</span></td>
+      <td>${v.provider ? `<a href="${esc(v.provider.link)}">${esc(short(v.provider.address))}</a>` : "unknown"}</td>
+      <td>${v.deliveredInSeconds != null ? esc(v.deliveredInSeconds) + " s" : "unknown"}</td>
+      <td>${v.seal.tx ? `<a href="${esc(v.seal.tx.link)}">sealed</a>` : "pending"}</td>
+      <td class="muted small">${when(new Date(v.checkedAt).toISOString())}</td>
+    </tr>`).join("\n");
+  const body = `<p class="crumb"><a href="/">Agent Market</a> / Delivery checks</p>
+  <header class="top">
+    <h1>Delivery checks</h1>
+    <p class="tag">A neutral check of a hire on BNB Smart Chain: the deliverable the provider serves is fetched and hashed, the hash is compared with the pointer the provider wrote on chain at submission and with the permanent copy on BNB Greenfield, and the result is sealed on opBNB from a key that signs nothing else. ${esc(list.count)} check${list.count === 1 ? "" : "s"} on record. As JSON: <a href="/api/delivery">/api/delivery</a>.</p>
+  </header>
+  <section class="block">
+    ${rows ? `<table class="schema"><thead><tr><th>hire</th><th>verdict</th><th>provider</th><th>funding to delivery</th><th>seal</th><th>checked</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted">No checks on record yet.</p>`}
+  </section>`;
+  return page("Delivery checks", body);
 }
