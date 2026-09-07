@@ -118,7 +118,8 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 | `healthmon/` | Health Factor Monitor, seller agent (ERC-8004 id 269228) |
 | `strategies/` | Shared strategy library the four agents run, with its golden tests |
 | `x402multi/` | The agents' pay-per-call route: x402 v2 terms, verification and settlement through Binance's B402 facilitator in USDT, USDC, USD1 or U, redemption and replay rules, with its tests |
-| `marketplace/src/rpc.js` | Chain reads with a primary and a fallback RPC endpoint: availability failures fall back, deterministic answers are never replayed |
+| `shared/` | `rpc.cjs`, chain reads with a primary and a fallback endpoint (availability failures fall back, deterministic answers are never replayed), and `directory.cjs`, the ERC-8004 directory client with its host, address, redirect and size guards; `marketplace/src/rpc.js` and `config.js` are their faces |
+| `marketplace/src/delivery.js` | Sealed delivery checks: the pages `/d` and `/d/<job>` and the routes under `/api/delivery`, read from the record the check writes |
 | `docs/PROBE_SPEC.md` | The open probe specification |
 | `reports/` | The Hire Report, task sheets, manual walkthroughs, and the committed inputs and outputs of every run |
 | `scripts/hire.mjs` | Command-line hire client that drives the public API end to end |
@@ -127,6 +128,12 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 
 ## How the marketplace earns trust
 
+- **Delivery is checked, not claimed.** For a hire on record, the deliverable the
+  provider serves and its permanent copy are fetched and hashed; the hash is
+  compared with the pointer the provider wrote on chain at submission and with
+  the copy's recorded hash, the funding-to-delivery time and the settlement are
+  read from the chain, and the result is sealed on opBNB from a key that signs
+  nothing else. Each check has a page at `/d/<job>` with the steps to repeat it.
 - **Prices are real.** Every displayed price is a live quote fetched from the
   agent and signature-checked against the agent's wallet, the one shown next
   to its registry entry; a quote whose signature does not verify is not shown
@@ -200,10 +207,12 @@ Everything on the pages is served as JSON from the same data core.
 | `/api/agents` | The listing, first-party and discovered, with live signed quotes and their check result |
 | `/api/agents/:id` | One agent: registration, card, quote, job counts |
 | `/api/agents/:id/quote` | A fresh signed quote from the agent |
-| `/api/jobs/:id` | One job read from the commerce contract, with the Greenfield copy of its deliverable when mirrored |
+| `/api/jobs/:id` | One job read from the commerce contract, with the Greenfield copy of its deliverable when mirrored and its sealed delivery check when one exists |
 | `/api/verified` | The live map of every probed registration |
 | `/api/verify/:id` | One registration's probe history |
 | `/api/trace` | Every settled hire with all four facts on record |
+| `/api/delivery` | Every sealed delivery check: verdict, the three checks, hashes, on-chain pointer and the opBNB seal |
+| `/api/delivery/:job` | The sealed check of one hire, with the canonical form and the steps to verify it |
 | `/api/hire/...` | The prepared transactions of the hire flow: job id, register, fund, settle |
 
 ## Running the storefront
