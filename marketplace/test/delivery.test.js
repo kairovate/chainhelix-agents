@@ -1,4 +1,4 @@
-// 2026-09-07 (A4): the sealed delivery checks on the storefront, read from a fixture record, no network.
+// 2026-09-07 (A4): the sealed delivery checks on the marketplace, read from a fixture record, no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "fs";

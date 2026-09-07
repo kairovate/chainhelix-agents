@@ -7,7 +7,7 @@ import { TTL } from "./config.js";
 import { viemTransports } from "./rpc.js"; // 2026-09-05: primary then fallback, see rpc.js
 import { cached } from "./cache.js";
 
-// fix 2026-09-02 H150: the storefront labelled every price "wallet-signed" and checked nothing; the check
+// fix 2026-09-02 H150: the marketplace labelled every price "wallet-signed" and checked nothing; the check
 // ran only on the hire path (hire.js buildCreateJobTx). Same SDK verifier here, against the agent's wallet
 // from the catalog (the wallet shown next to its registry entry). QUOTE_SIG_CHECK=0 skips it.
 const require = createRequire(import.meta.url);
