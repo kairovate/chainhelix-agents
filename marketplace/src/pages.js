@@ -840,7 +840,7 @@ export function renderDelivery(v) {
       <li>Open the opBNB transaction${v.seal.tx ? ` <a href="${esc(v.seal.tx.link)}">${esc(short(v.seal.tx.hash))}</a>` : ""}. Its data ends with that hash and carries the claim number; the sender${v.seal.key ? ` is <code>${esc(v.seal.key)}</code>,` : ""} the ChainHelix delivery key, which signs nothing else.</li>
       <li>Fetch the deliverable yourself and hash the bytes. sha256 must equal the value above, keccak256 must equal the pointer on chain.</li>
     </ol>
-    <p class="muted small">A check like this one is sold by the ChainHelix MCP as the tool verified_delivery, one cent per hire, paid per call on BNB Smart Chain. The free tools delivery_status and delivery_spec return the same record and these rules.</p>
+    <p class="muted small">A check like this one is sold by the ChainHelix MCP as the tool verified_delivery, five cents per hire, paid per call on BNB Smart Chain. The tool delivery_status returns the record for one cent and delivery_spec returns these rules for free.</p>
   </section>`;
   return page(`Delivery check for hire ${v.job}`, body);
 }
