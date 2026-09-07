@@ -100,8 +100,8 @@ test("ipIsPublic rejects every private range, at both edges of each", () => {
 // fix 2026-09-03 H191 (residual only): B3-36's central premise was refuted by verification, which found
 // the resolver in the same file the sweep quoted. What survived was this file, which exercised only
 // literals and bare names. The four shapes the sweep measured are pinned here, together with the decision
-// that actually refuses them. The string guard is name-based on purpose and passes them; resolvePublic is
-// the layer that refuses any of them that really points inward, and fetchJson calls it before every hop.
+// that refuses them. The string guard is name-based on purpose and passes them; resolvePublic is
+// the layer that refuses any of them that points inward, and fetchJson calls it before every hop.
 test("probeAllowed is name-based: the audited shapes pass the string guard", () => {
   assert.equal(probeAllowed("https://127.0.0.1.nip.io/"), true);        // wildcard DNS name
   assert.equal(probeAllowed("https://foo.local./"), true);              // trailing dot, absolute FQDN

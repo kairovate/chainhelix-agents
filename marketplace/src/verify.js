@@ -18,7 +18,7 @@
 //               was hired, funded and delivered (tx hashes in the test record). VERIFY_RUNG=0 omits it.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, openSync, writeSync, readSync, closeSync, rmSync, statSync, readdirSync, unlinkSync } from "fs";
 import { dirname } from "path";
-import { SCAN_API, CHAIN_ID, scanHeaders } from "./config.js";
+import { SCAN_API, CHAIN_ID, scanHeaders, directoryBatch } from "./config.js"; // 2026-09-07 B3: directory pages through the shared client
 import { rpcRead } from "./rpc.js"; // 2026-09-05
 import { CATALOG } from "./catalog.js";
 import { probeAllowed, extractEndpoint, cardUrl, resolveEndpointTemplate, cardFailureStatus, RESOLVE_TEMPLATES } from "./probe.js";
@@ -267,7 +267,8 @@ async function jsonCapped(res, max) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-// follow=true only for our own data sources (8004scan, and the IPFS gateway this file picks at line 21);
+// follow=true only for our own data sources (the IPFS gateway this file picks at line 21; the directory pages moved
+// to the shared client on 2026-09-07, B3, which follows redirects by hand inside the directory's host family);
 // agent endpoints never follow redirects (a redirect could point at a private address, the same rule
 // probe.js enforces).
 async function fetchJson(url, ms, follow) {
@@ -297,9 +298,11 @@ export async function enumerateAgents({ pageSize = 100, maxPages = Infinity, log
   while (pages < maxPages) {
     const url = `${SCAN_API}/agents?limit=${pageSize}&chain_id=${CHAIN_ID}&offset=${idx.offset}`;
     // one slow or failed page must not end a 2,800-page run: retry with backoff, then wait a minute and go on
+    // 2026-09-07 B3: the page is read through the shared directory client (redirect guard, key header, private-address
+    // refusal, listing check); this ladder is the retry, so that client runs with no hold (directoryBatch).
     let d = null;
     for (let attempt = 0; attempt < 6 && !d; attempt++) {
-      try { d = await fetchJson(url, 20_000, true); }
+      try { d = await directoryBatch.listing(url); }
       catch (e) { log(`enumerate: page at offset ${idx.offset} failed (${e.message}), attempt ${attempt + 1}`); await new Promise((r) => setTimeout(r, Math.min(60_000, 5_000 * 3 ** attempt))); }
     }
     if (!d) { log("enumerate: giving up on this page for now, will resume from the saved offset next run"); break; }
@@ -336,7 +339,7 @@ export async function enumerateNew({ pageSize = 100, maxPages = 20, log = () => 
   for (let page = 0; page < maxPages; page++) {
     const url = `${SCAN_API}/agents?limit=${pageSize}&chain_id=${CHAIN_ID}&offset=${page * pageSize}`;
     let d = null;
-    try { d = await fetchJson(url, 20_000, true); } catch (e) { log(`enumerate-new: page ${page} failed (${e.message})`); break; }
+    try { d = await directoryBatch.listing(url); } catch (e) { log(`enumerate-new: page ${page} failed (${e.message})`); break; } // 2026-09-07 B3
     idx.total = d.total ?? idx.total;
     const items = d.items || [];
     if (!items.length) break;
