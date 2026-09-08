@@ -801,6 +801,13 @@ export function renderAgent(d) {
 function yesNo(v) { return v === true ? "<b class=\"on\">passed</b>" : v === false ? "<b class=\"off\">failed</b>" : "<span class=\"muted\">not checked</span>"; }
 function when(iso) { return iso ? esc(String(iso).slice(0, 19).replace("T", " ")) + "Z" : "unknown"; }
 function link(t) { return t && t.link ? `<a href="${esc(t.link)}">${esc(short(t.hash || t.address))}</a>` : "none"; }
+// 2026-09-08 B10: the cleared buyer line on the buyer row, existing muted style; nothing when no clearance is on file
+export function clearanceLine(cb) {
+  if (!cb || !cb.onFile) return "";
+  if (!cb.active) return ` <span class="muted small">clearance on file, period ended</span>`;
+  if (!cb.currentFresh) return ` <span class="muted small">cleared buyer, statement past its 24 hours, renewal pending</span>`;
+  return ` <span class="muted small">cleared buyer, ${esc(cb.result)} at ${when(cb.screenedAt)}, renewed ${esc(String(cb.renewals))} times</span>`;
+}
 export function renderDelivery(v) {
   const verdictCopy = { verified: "The deliverable on record is the one the provider submitted on chain, and every copy matches.", partial: "No check failed, but the on chain pointer was not available to compare when this check ran.", mismatch: "At least one check failed. The rows below say which." };
   const body = `<p class="crumb"><a href="/">Agent Market</a> / <a href="/d">Delivery checks</a> / job ${esc(v.job)}</p>
@@ -825,7 +832,7 @@ export function renderDelivery(v) {
     <table class="schema">
       <tbody>
         <tr><td>provider</td><td>${v.provider ? `<a href="${esc(v.provider.link)}">${esc(v.provider.address)}</a>` : "unknown"}</td></tr>
-        <tr><td>buyer</td><td>${v.buyer ? `<a href="${esc(v.buyer.link)}">${esc(v.buyer.address)}</a>` : "unknown"}</td></tr>
+        <tr><td>buyer</td><td>${v.buyer ? `<a href="${esc(v.buyer.link)}">${esc(v.buyer.address)}</a>` : "unknown"}${clearanceLine(v.buyerClearance)}</td></tr>
         <tr><td>status on chain</td><td>${esc(v.jobStatus)}</td></tr>
         <tr><td>funded</td><td>${v.hired ? `${esc(v.hired.amount)} ${esc(v.hired.token)} at ${when(v.hired.at)}, ${link(v.hired.tx)}` : "not on record"}</td></tr>
         <tr><td>submitted</td><td>${v.onChain && v.onChain.submittedAt ? `${when(v.onChain.submittedAt)}, ${link(v.onChain.submitTx)}` : "not on record"}</td></tr>

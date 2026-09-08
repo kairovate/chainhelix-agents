@@ -22,7 +22,7 @@ import { renderHome, renderCategory, renderAgent, renderHire, HIRE_SCRIPT, CATEG
 import { startJobStats } from "./jobstats.js";
 import { verifyNow, liveMap, recordFromState } from "./verify.js"; // 2026-08-24 ChainHelix Verified live layer
 import { traceView, traceRows, loadTrace } from "./trace.js"; // 2026-09-03 settled hires, end to end (read-only)
-import { deliveryFor, deliveryList } from "./delivery.js"; // 2026-09-07 A4: sealed delivery checks (read-only)
+import { deliveryFor, deliveryList, clearedBuyer } from "./delivery.js"; // 2026-09-07 A4: sealed delivery checks (read-only); 2026-09-08 B10: cleared buyers
 import { renderDelivery, renderDeliveryList } from "./pages.js";
 import { paidCallsView, paidCallRows, loadPaidCalls } from "./paid_calls.js"; // 2026-09-05 pay-per-call purchases on record (read-only)
 
@@ -334,6 +334,11 @@ app.get("/d/:job", async (req, reply) => {
   const v = deliveryFor(req.params.job);
   if (!v) return reply.code(404).type("text/plain").send("no delivery check on record for this hire");
   sendPage(reply, renderDelivery(v));
+});
+app.get("/api/cleared/:address", async (req, reply) => { // 2026-09-08 B10: what a seller reads before taking a job
+  if (!/^0x[0-9a-fA-F]{40}$/.test(req.params.address)) return reply.code(400).send({ error: "EVM address required" });
+  const c = clearedBuyer(req.params.address);
+  return c.onFile ? c : reply.code(404).send({ error: "no clearance on file for this wallet", how: "the wallet enrols itself through the ChainHelix MCP tool cleared_buyer; buyer_clearance reads it" });
 });
 app.get("/api/paid-calls", async () => paidCallsView()); // 2026-09-05
 app.get("/api/jobs/:id", async (req, reply) => {
