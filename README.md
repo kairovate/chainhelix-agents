@@ -103,7 +103,7 @@ The four agents also sell one call at a time over B402, without escrow, in USDT,
 | healthmon | USDC | /healthmon/x402 | [0x5dd8506b](https://bscscan.com/tx/0x5dd8506b28529ce592c53a56e55460ff64f828cb87d07a2f87d33b321625e96d) |
 
 ### Permanent copies
-Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhelix-verified`, prefix `marketplace/deliverables/`, with the sha256 of the served bytes stored next to it. Fourteen objects are on record, one per hire above plus the earliest test hire. Each row at [agents.chainhelix.io/api/trace](https://agents.chainhelix.io/api/trace) carries the Greenfield URL, the object id and that sha256, so a copy can be fetched and hashed against the served deliverable by anyone.
+Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhelix-verified`, prefix `marketplace/deliverables/`, with the sha256 of the served bytes stored next to it. Eighteen objects are on record, one per hire that reached delivery. Each row at [agents.chainhelix.io/api/trace](https://agents.chainhelix.io/api/trace) carries the Greenfield URL, the object id and that sha256, so a copy can be fetched and hashed against the served deliverable by anyone.
 
 ## What is in this repository
 
