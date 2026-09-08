@@ -149,6 +149,15 @@ export function startJobStats() {
   setInterval(sweep, SWEEP_INTERVAL_MS);
 }
 
+// 2026-09-08 (seller badge): the completed job ids of one provider, from the same map the totals above are built from,
+// so the badge's "n of m completed jobs checked" adds up against the trust panel's "m completed".
+export function completedJobIds(providerWallet) {
+  const pk = (providerWallet || "").toLowerCase(); if (!pk) return [];
+  const want = `${pk}|completed`; const ids = [];
+  for (const id in state.jobs) if (state.jobs[id] === want) ids.push(Number(id));
+  return ids.sort((a, b) => a - b);
+}
+
 export function jobStatsFor(providerWallet) {
   const p = state.providers[(providerWallet || "").toLowerCase()];
   const scanning = state.lastJobId < state.totalOnChain || (SAFE_STATE && state.updatedAt == null); // fix 2026-09-02 H194: before the first sweep the panel says so

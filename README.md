@@ -120,6 +120,7 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 | `x402multi/` | The agents' pay-per-call route: x402 v2 terms, verification and settlement through Binance's B402 facilitator in USDT, USDC, USD1 or U, redemption and replay rules, with its tests |
 | `shared/` | `rpc.cjs`, chain reads with a primary and a fallback endpoint (availability failures fall back, deterministic answers are never replayed), and `directory.cjs`, the ERC-8004 directory client with its host, address, redirect and size guards; `marketplace/src/rpc.js` and `config.js` are their faces |
 | `marketplace/src/delivery.js` | Sealed delivery checks: the pages `/d` and `/d/<job>` and the routes under `/api/delivery`, read from the record the check writes |
+| `marketplace/src/badge.js` | Seller badge: every completed job of a seller set against the sealed checks; earned only when all are checked, otherwise the true counts |
 | `docs/PROBE_SPEC.md` | The open probe specification |
 | `reports/` | The Hire Report, task sheets, manual walkthroughs, and the committed inputs and outputs of every run |
 | `scripts/hire.mjs` | Command-line hire client that drives the public API end to end |
@@ -134,6 +135,9 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
   the copy's recorded hash, the funding-to-delivery time and the settlement are
   read from the chain, and the result is sealed on opBNB from a key that signs
   nothing else. Each check has a page at `/d/<job>` with the steps to repeat it.
+  A seller whose every completed job has a sealed check carries the line
+  "all deliveries checked" on its card; any other seller shows how many of its
+  completed jobs are checked and how many passed.
 - **Prices are real.** Every displayed price is a live quote fetched from the
   agent and signature-checked against the agent's wallet, the one shown next
   to its registry entry; a quote whose signature does not verify is not shown

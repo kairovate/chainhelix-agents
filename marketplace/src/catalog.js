@@ -10,6 +10,7 @@ import { scanAgent, discoverCategory } from "./scan.js";
 import { displayQuote } from "./quote.js";
 import { probeThirdParty } from "./probe.js";
 import { jobStatsFor } from "./jobstats.js";
+import { deliveryBadge } from "./badge.js"; // 2026-09-08: seller badge, sealed checks against completed jobs
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const CATALOG = JSON.parse(readFileSync(join(here, "..", "catalog.json"), "utf8"));
@@ -79,6 +80,7 @@ async function firstPartyEntry(agent) {
         : null,
     reputation: scan ? scan.reputation : null,
     jobs: jobStatsFor(agent.wallet),
+    deliveryBadge: deliveryBadge(agent.wallet),
     operatorDisclosure: operatorDisclosure(agent),
   };
 }

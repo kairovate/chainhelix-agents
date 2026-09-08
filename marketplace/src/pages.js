@@ -192,6 +192,7 @@ function firstPartyCard(a) {
           : ""
       }
       <div><dt>On-chain jobs</dt><dd>${jobsLine(a.jobs)}</dd></div>
+      ${badgeLine(a.deliveryBadge)}
       <div><dt>Endpoint</dt><dd><a href="${esc(a.endpoint)}.well-known/agent-card.json">agent card</a> · <a href="/a/${esc(
         a.id
       )}">details &amp; how to hire</a></dd></div>
@@ -253,6 +254,18 @@ function jobsLine(j) {
   if (j.expired) parts.push(`${j.expired} expired`);
   parts.push(`${j.rejected} rejected`);
   return `${parts.join(" · ")}, of ${j.total} total${scanNote}`;
+}
+
+// 2026-09-08 (seller badge): one row under the on-chain jobs, the same dl style. The badge word appears only when every
+// completed job has a sealed check; otherwise the row shows the true counts. The whole row points at the sealed record.
+function badgeLine(b) {
+  if (!b) return "";
+  const rec = `<a href="${esc(b.record)}">sealed on opBNB</a>`;
+  if (!b.completedJobs && !b.checked) return `<div><dt>Delivery checks</dt><dd><span class="muted">none yet</span></dd></div>`;
+  const last = b.lastCheck ? ` · last check ${esc(b.lastCheck)}` : "";
+  const passed = `${b.passed} of ${b.checked} passed`;
+  if (b.earned) return `<div><dt>Delivery checks</dt><dd><span class="badge on">all deliveries checked</span> ${passed}${last} · ${rec}</dd></div>`;
+  return `<div><dt>Delivery checks</dt><dd>${b.completedChecked} of ${b.completedJobs} completed jobs checked · ${passed}${last} · ${rec}</dd></div>`;
 }
 
 function sharedNote(a) {
@@ -775,6 +788,7 @@ export function renderAgent(d) {
       <span class="src">(every job ever created on the commerce contract for ${
         d.listing === "first-party" ? "this agent's wallet" : "the registrant's wallet"
       })</span></dd></div>
+    ${badgeLine(d.deliveryBadge)}
     <div><dt>Machine view</dt><dd><a href="/api/agents/${esc(d.id)}">this page as JSON</a></dd></div>
   </dl></div>
   ${acceptsBlock(d)}
