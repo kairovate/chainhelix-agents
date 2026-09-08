@@ -195,6 +195,15 @@ function savePending() {
     fs.renameSync(pendingFile() + '.tmp', pendingFile());
   } catch (e) { warn('pending save failed: ' + e.message); }
 }
+// 2026-09-08 B82 (operator: "can u fix these issues"): every settle row now carries the destination it was settled
+// against, read from the payment requirement the payer signed: payTo, network, asset. Until now the row held nonce,
+// payer, tx, amount and the recipient was proven only by inference (the proxy refuses any other payTo; the chain
+// receipt shows the transfer). With the field on the row the ledger stands alone as a payout-address record. Rows
+// written before this line stay as they are (forward only).
+function dest(reqs) {
+  reqs = reqs || {};
+  return { payTo: reqs.payTo || null, network: reqs.network || null, asset: reqs.asset || null };
+}
 function ledger(row) {
   row.ts = Date.now();
   try { fs.appendFileSync(settlesFile(), JSON.stringify(row) + '\n'); } catch (e) { warn('ledger append failed: ' + e.message); }
@@ -250,7 +259,7 @@ function settle(paymentPayload, paymentRequirements, nonce, payer, cb, bazaar) {
   var body = settleBody(paymentPayload, paymentRequirements, bazaar);
   request('/papi/v2/b402/settle', body, function (e, j, status, meta) {
     if (!e && j && j.success === true) {
-      ledger({ kind: 'settle', ok: true, nonce: nonce, payer: payer, tx: j.transaction || '', amount: j.amount || null, trace: traceIds(meta) });
+      ledger(Object.assign({ kind: 'settle', ok: true, nonce: nonce, payer: payer, tx: j.transaction || '', amount: j.amount || null }, dest(paymentRequirements), { trace: traceIds(meta) }));
       return cb(true, j.transaction || null, false);
     }
     // terminal rejection: well-formed answer with an error code and no broadcast.
@@ -261,8 +270,8 @@ function settle(paymentPayload, paymentRequirements, nonce, payer, cb, bazaar) {
     // (status, headers, raw body), the 08-15 failures had no trace IDs to hand
     // Binance when they asked to correlate their production logs.
     if (!e && j && j.success === false && j.errorReason && !j.transaction) {
-      ledger({ kind: 'settle', ok: false, nonce: nonce, payer: payer, reason: j.errorReason,
-        trace: traceIds(meta), httpStatus: meta && meta.status, respHeaders: meta && meta.headers, raw: meta && meta.raw });
+      ledger(Object.assign({ kind: 'settle', ok: false, nonce: nonce, payer: payer, reason: j.errorReason }, dest(paymentRequirements),
+        { trace: traceIds(meta), httpStatus: meta && meta.status, respHeaders: meta && meta.headers, raw: meta && meta.raw }));
       return cb(false, null, false, j.errorReason);
     }
     // ambiguous (transport error, timeout, or broadcast without confirmation):
@@ -290,17 +299,17 @@ function poll() {
     request('/papi/v2/b402/settle', settleBody(p.payload, p.reqs, p.bazaar), function (e, j, status, meta) {
       p.tries++;
       if (!e && j && j.success === true) {
-        ledger({ kind: 'settle_late', ok: true, nonce: p.nonce, payer: p.payer, tx: j.transaction || '', amount: j.amount || null, tries: p.tries, trace: traceIds(meta) });
+        ledger(Object.assign({ kind: 'settle_late', ok: true, nonce: p.nonce, payer: p.payer, tx: j.transaction || '', amount: j.amount || null, tries: p.tries }, dest(p.reqs), { trace: traceIds(meta) }));
         log('late settle CONFIRMED nonce ' + p.nonce + ', payer can redeem with the same X-PAYMENT');
         if (st.onLateSettle) { try { st.onLateSettle(p.nonce, p.payload, j.transaction || null, p.reqs); } catch (e2) {} } // payload so the owed entry binds to the signed payment (server F1); tx+reqs for the genesis marker
       } else if (!e && j && j.success === false && j.errorReason && !j.transaction) {
-        ledger({ kind: 'settle_late', ok: false, nonce: p.nonce, payer: p.payer, reason: j.errorReason, tries: p.tries,
-          trace: traceIds(meta), httpStatus: meta && meta.status, respHeaders: meta && meta.headers, raw: meta && meta.raw });
+        ledger(Object.assign({ kind: 'settle_late', ok: false, nonce: p.nonce, payer: p.payer, reason: j.errorReason, tries: p.tries }, dest(p.reqs),
+          { trace: traceIds(meta), httpStatus: meta && meta.status, respHeaders: meta && meta.headers, raw: meta && meta.raw }));
       } else if (Date.now() - p.firstAt > GIVE_UP_MS) {
         // Past their ~30-min reconciliation horizon with no terminal answer.
         // ALARM (never silent-drop): if funds moved, the payer is owed service.
         warn('ALARM: pending settle UNRESOLVED past ' + Math.round(GIVE_UP_MS / 60e3) + 'min, nonce ' + p.nonce + ' payer ' + p.payer + ', parked to ledger for manual review');
-        ledger({ kind: 'settle_unresolved', nonce: p.nonce, payer: p.payer, tries: p.tries });
+        ledger(Object.assign({ kind: 'settle_unresolved', nonce: p.nonce, payer: p.payer, tries: p.tries }, dest(p.reqs)));
       } else {
         keep.push(p); // still ambiguous, retry next tick
       }
