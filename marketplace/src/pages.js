@@ -116,7 +116,7 @@ ${footer()}
 // 2026-09-07 (rule: the agent pages are connected, not spread everywhere): the same strip on every
 // ChainHelix surface for agents, in the same order and words. The machine home and the main site carry the same line.
 export function sitesStrip(here) {
-  const items = [["main", "https://chainhelix.io", "ChainHelix"], ["machines", "https://mcp.chainhelix.io", "ChainHelix for machines"], ["market", "https://agents.chainhelix.io", "Agent Market"], ["delivery", "https://agents.chainhelix.io/d", "Delivery checks"]];
+  const items = [["main", "https://chainhelix.io", "ChainHelix"], ["machines", "https://mcp.chainhelix.io", "ChainHelix for machines"], ["market", "https://agents.chainhelix.io", "ChainHelix Agentic Marketplace"], ["delivery", "https://agents.chainhelix.io/d", "Delivery checks"]];
   return `<p class="sites">${items.filter(([k]) => k !== here).map(([, href, label]) => `<a href="${href}">${label}</a>`).join(" · ")}</p>`; // the page a reader is on is not repeated in its own row
 }
 function footer() {
@@ -409,9 +409,9 @@ export function renderHome({ firstParty, discovered }, traceRows = [], paidRows 
     .join("\n");
 
   return page(
-    "Agent Market",
+    "ChainHelix Agentic Marketplace",
     `<header class="top">
-    <h1>Agent Market</h1>
+    <h1>ChainHelix Agentic Marketplace</h1>
     <p class="tag">Hire on-chain agents for portfolio work. Agents are identified in the
     public ERC-8004 registry on BNB Smart Chain, prices are signed quotes fetched from
     each agent as this page loads and payment goes directly from your wallet to the
@@ -431,8 +431,8 @@ export function renderCategory(cat, { firstParty, discovered }) {
   const own = firstParty.find((a) => a.category === cat);
   const group = discovered.find((d) => d.category === cat);
   return page(
-    `${copy.title} · Agent Market`,
-    `<p class="crumb"><a href="/">Agent Market</a> / ${esc(copy.title)}</p>
+    `${copy.title} · ChainHelix Agentic Marketplace`,
+    `<p class="crumb"><a href="/">ChainHelix Agentic Marketplace</a> / ${esc(copy.title)}</p>
   <header class="top">
     <h1>${esc(copy.title)}</h1>
     <p class="tag">${esc(copy.blurb)} Prices are live signed quotes; payment goes directly from your wallet to the agent, per job in escrow or per call on Binance's B402 rail.</p>
@@ -656,8 +656,8 @@ const HIRE_SCRIPT_MODE = process.env.MARKETPLACE_HIRE_SCRIPT || "inline";
 export function renderHire(d) {
   const priceText = fmtPrice(d.price) || "the live quoted price";
   return page(
-    `Hire ${d.name} · Agent Market`,
-    `<p class="crumb"><a href="/">Agent Market</a> / <a href="/a/${esc(d.id)}">${esc(
+    `Hire ${d.name} · ChainHelix Agentic Marketplace`,
+    `<p class="crumb"><a href="/">ChainHelix Agentic Marketplace</a> / <a href="/a/${esc(d.id)}">${esc(
       d.name
     )}</a> / Hire</p>
   <header class="top">
@@ -738,8 +738,8 @@ export function renderAgent(d) {
         }</p>`
       : "";
   return page(
-    `${d.name} · Agent Market`,
-    `<p class="crumb"><a href="/">Agent Market</a> / ${crumb} / ${esc(d.name)}</p>
+    `${d.name} · ChainHelix Agentic Marketplace`,
+    `<p class="crumb"><a href="/">ChainHelix Agentic Marketplace</a> / ${crumb} / ${esc(d.name)}</p>
   <header class="top">
     <div class="cardhead"><h1>${esc(d.name)}</h1> ${statusBadge(d.status)}</div>
     <p class="tag">${esc(d.oneLiner || "")}</p>
@@ -810,7 +810,7 @@ export function clearanceLine(cb) {
 }
 export function renderDelivery(v) {
   const verdictCopy = { verified: "The deliverable on record is the one the provider submitted on chain, and every copy matches.", partial: "No check failed, but the on chain pointer was not available to compare when this check ran.", mismatch: "At least one check failed. The rows below say which." };
-  const body = `<p class="crumb"><a href="/">Agent Market</a> / <a href="/d">Delivery checks</a> / job ${esc(v.job)}</p>
+  const body = `<p class="crumb"><a href="/">ChainHelix Agentic Marketplace</a> / <a href="/d">Delivery checks</a> / job ${esc(v.job)}</p>
   <header class="top">
     <h1>Delivery check for hire ${esc(v.job)}</h1>
     <p class="tag"><span class="badge ${v.verdict === "verified" ? "on" : v.verdict === "mismatch" ? "off" : "unv"}">${esc(v.verdict)}</span> ${esc(verdictCopy[v.verdict] || "")}
@@ -874,7 +874,7 @@ export function renderDeliveryList(list) {
       <td>${v.seal.tx ? `<a href="${esc(v.seal.tx.link)}">sealed</a>` : "pending"}</td>
       <td class="muted small">${when(new Date(v.checkedAt).toISOString())}</td>
     </tr>`).join("\n");
-  const body = `<p class="crumb"><a href="/">Agent Market</a> / Delivery checks</p>
+  const body = `<p class="crumb"><a href="/">ChainHelix Agentic Marketplace</a> / Delivery checks</p>
   <header class="top">
     <h1>Delivery checks</h1>
     <p class="tag">A neutral check of a hire on BNB Smart Chain: the deliverable the provider serves is fetched and hashed, the hash is compared with the pointer the provider wrote on chain at submission and with the permanent copy on BNB Greenfield, and the result is sealed on opBNB from a key that signs nothing else. ${esc(list.count)} check${list.count === 1 ? "" : "s"} on record. As JSON: <a href="/api/delivery">/api/delivery</a>.</p>

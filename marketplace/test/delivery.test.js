@@ -33,7 +33,7 @@ test("the list page and the connected sites strip", () => {
   const html = renderDeliveryList(deliveryList(10));
   assert.match(html, /1 check on record/); assert.match(html, /href="\/d\/4242"/);
   assert.match(html, /href="https:\/\/mcp\.chainhelix\.io">ChainHelix for machines/); assert.match(html, /href="https:\/\/chainhelix\.io">ChainHelix/);
-  assert.doesNotMatch(sitesStrip("machines"), /ChainHelix for machines/); assert.match(sitesStrip("machines"), /Agent Market/);
+  assert.doesNotMatch(sitesStrip("machines"), /ChainHelix for machines/); assert.match(sitesStrip("machines"), /ChainHelix Agentic Marketplace/);
 });
 test("no record file: empty list, nothing thrown", () => {
   process.env.DELIVERY_CLAIMS_FILE = join(dir, "missing.json");
