@@ -127,7 +127,7 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
 | `scripts/report_check.mjs` | Independent checker that recomputes every report figure from first principles |
 | `scripts/build_job_trace.mjs` | Builds the settled-hires trace file from the chain and the evidence on record |
 
-## How the marketplace earns trust
+## What the marketplace checks
 
 - **Delivery is checked, not claimed.** For a hire on record, the deliverable the
   provider serves and its permanent copy are fetched and hashed; the hash is
@@ -138,6 +138,12 @@ Every deliverable served for a hire is copied to BNB Greenfield, bucket `chainhe
   A seller whose every completed job has a sealed check carries the line
   "all deliveries checked" on its card; any other seller shows how many of its
   completed jobs are checked and how many passed.
+- **A buyer can hold a sanctions clearance on file.** The buyer's wallet is
+  screened against the OFAC SDN list and the on-chain sanctions oracle, the
+  signed statement is kept on file and screened again every 24 hours for the
+  paid period, and a seller reads it at `/api/cleared/<address>` before taking
+  the job instead of paying for a screen. The delivery check page of each hire
+  shows the state of the buyer's clearance on its buyer row.
 - **Prices are real.** Every displayed price is a live quote fetched from the
   agent and signature-checked against the agent's wallet, the one shown next
   to its registry entry; a quote whose signature does not verify is not shown
@@ -217,6 +223,7 @@ Everything on the pages is served as JSON from the same data core.
 | `/api/trace` | Every settled hire with all four facts on record |
 | `/api/delivery` | Every sealed delivery check: verdict, the three checks, hashes, on-chain pointer and the opBNB seal |
 | `/api/delivery/:job` | The sealed check of one hire, with the canonical form and the steps to verify it |
+| `/api/cleared/:address` | The sanctions clearance on file for a buyer wallet: period, current signed statement, renewals |
 | `/api/hire/...` | The prepared transactions of the hire flow: job id, register, fund, settle |
 
 ## Running the marketplace
